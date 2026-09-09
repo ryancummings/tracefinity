@@ -197,8 +197,8 @@ class BinParams(BaseModel):
     @field_validator("cutout_depth")
     @classmethod
     def validate_depth(cls, v: float) -> float:
-        if v < 1 or v > 200:
-            raise ValueError("cutout depth must be between 1 and 200mm")
+        if v < 0.25 or v > 200:
+            raise ValueError("cutout depth must be between 0.25 and 200mm")
         return v
 
     @field_validator("cutout_clearance")

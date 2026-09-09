@@ -486,7 +486,7 @@ export default function BinPage() {
             <div className="text-[11px] text-text-secondary space-y-0.5">
               <div className="flex justify-between"><span>Width</span><span>{binW} mm</span></div>
               <div className="flex justify-between"><span>Depth</span><span>{binH} mm</span></div>
-              <div className="flex justify-between"><span>Height</span><span>{(config.height_units * 7 + 5 + effectiveRimUnits * 7 + (config.stacking_lip ? 4.4 : 0)).toFixed(1)} mm</span></div>
+              <div className="flex justify-between"><span>Height</span><span>{(config.height_units * 7 + effectiveRimUnits * 7 + (config.stacking_lip ? 4.4 : 0)).toFixed(1)} mm</span></div>
             </div>
           </div>
         </div>
@@ -586,7 +586,7 @@ export default function BinPage() {
                 partialBinsValues={config.partial_bins_values}
                 wallThickness={config.wall_thickness}
                 defaultCutoutDepth={config.cutout_depth}
-                maxCutoutDepth={calcMaxCutoutDepth(config.height_units, config.stacking_lip)}
+                maxCutoutDepth={calcMaxCutoutDepth(config.height_units)}
                 halfGridBase={config.half_grid_base}
                 onEditTool={(toolId) => router.push(projectSource.scopedHref(`/tools/${toolId}`))}
                 smoothedToolIds={smoothedToolIds}

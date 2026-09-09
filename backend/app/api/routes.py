@@ -100,7 +100,7 @@ from app.services.project_service import (
 )
 from app.services.project_store import ProjectStore
 from app.services.session_store import SessionStore
-from app.services.stl_generator_manifold import ManifoldSTLGenerator
+from app.services.stl_generator_manifold import STL_GEOMETRY_VERSION, ManifoldSTLGenerator
 from app.services.store_errors import StoreClosedError
 from app.services.tool_namer import name_polygons
 from app.services.tool_store import ToolStore
@@ -631,6 +631,7 @@ def _run_generate(
     store: SessionStore | BinStore,
 ) -> GenerateResponse:
     """shared STL generation with caching, splitting, and zipping"""
+    input_hash = f"{STL_GEOMETRY_VERSION}:{input_hash}"
     # in-flight guard: the request captured its store before any awaits or
     # threadpool hops; refuse to write outputs once the user is deleted
     store.ensure_open()

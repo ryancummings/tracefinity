@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 from app.constants import GF_GRID
 
+# Bump when geometry changes so saved previews and exports regenerate.
+STL_GEOMETRY_VERSION = 2
+
 GF_HALF_GRID = GF_GRID / 2  # 21mm
 GF_HEIGHT_UNIT = 7.0
 GF_BASE_HEIGHT = 4.75
@@ -539,11 +542,12 @@ def _add_lip_features(
 
 def _resolve_pocket_depth(override: float | None, config, max_depth: float) -> float:
     """Per-feature pocket depth: override → config.cutout_depth fallback,
-    plus insert_height when enabled, clamped to [5, max_depth]."""
+    plus insert_height when enabled. The physical maximum takes precedence
+    over the usual 5mm minimum for shallow bins."""
     base = override if override is not None else config.cutout_depth
     if getattr(config, 'insert_enabled', False):
         base += getattr(config, 'insert_height', 1.0)
-    return max(5, min(base, max_depth))
+    return min(max_depth, max(5, base))
 
 
 def _filleted_rect_radius(width: float, pocket_depth: float) -> float:
@@ -1383,8 +1387,9 @@ class ManifoldSTLGenerator:
         pocket_depth = 5
         if polygons:
             floor_z = GF_BASE_HEIGHT
-            lip_deduction = (LIP_D3 + LIP_D4) if config.stacking_lip else 0
-            max_depth = wall_top_z - floor_z - 2 - lip_deduction
+            # Pockets start at the wall top; the lip and raised rim sit above it.
+            # Retain the base and 2mm of material beneath every pocket.
+            max_depth = wall_top_z - floor_z - 2
             # Default pocket_depth still tracks the global cutout_depth; per-cutout
             # overrides are resolved inside the cutter functions.
             pocket_depth = _resolve_pocket_depth(None, config, max_depth)

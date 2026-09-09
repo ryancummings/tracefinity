@@ -17,6 +17,10 @@ The limit is per process, not shared across processes or replicas. Tracefinity
 currently runs as a single backend process, so a value of `1` serializes STL
 generation for the standard deployment.
 
+Cached generation keys include `STL_GEOMETRY_VERSION` from the generator. Bump
+it when geometry rules change so existing bins and sessions regenerate their
+previews and exports on the next generation request.
+
 ## Export retention
 
 Generated exports are regenerable from the stored polygons and bin config, so
@@ -44,6 +48,7 @@ record, and `<artefact> not found` otherwise.
 - **Raised rim**: with `rim_units > 0`, a hollow perimeter collar extends the wall from the floor face up by `rim_units * 7`mm, leaving the interior open. The stacking lip rides on top of the collar.
 - **Lip base**: `height_units * 7 + rim_units * 7` (= wall top when `rim_units == 0`).
 - **Stacking lip top**: lip base + 4.4mm (d0=1.9 + d1=1.8 + d2=0.7). Do NOT use bounding box max Z.
+- **Maximum pocket depth**: `height_units * 7 - 4.75 - 2`mm, preserving the base and a 2mm floor. The lip and raised rim do not reduce this. At 1u the physical maximum is 0.25mm and takes precedence over the usual 5mm minimum, including for per-cutout overrides and insert allowances.
 - **Pocket extrude margin**: 0.01mm epsilon for boolean cleanliness.
 
 ## Gridfinity Constants

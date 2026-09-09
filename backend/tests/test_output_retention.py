@@ -192,7 +192,7 @@ def test_cached_generate_refreshes_artefact_mtimes(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "_stl_generation_semaphore", None)
     now = time.time()
     paths = [
-        _write_aged(tmp_path / "outputs", name, 25, now, content=b"h1" if name.endswith(".hash") else b"x")
+        _write_aged(tmp_path / "outputs", name, 25, now, content=f"{routes.STL_GEOMETRY_VERSION}:h1".encode() if name.endswith(".hash") else b"x")
         for name in FAMILY
     ]
 
