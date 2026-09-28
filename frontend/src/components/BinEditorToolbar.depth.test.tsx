@@ -16,6 +16,8 @@ const props = {
   onRemoveTool: vi.fn(), onRemoveLabel: vi.fn(), onUpdateLabel: vi.fn(),
   defaultCutoutDepth: 20, maxCutoutDepth: 14.25,
   onSetCutoutDepthOverride: vi.fn(), onSetHoleDepthOverride: vi.fn(),
+  cutoutShape: 'scoop' as const, onCutoutShapeChange: vi.fn(),
+  onUpdateHole: vi.fn(), onRemoveHole: vi.fn(),
 }
 
 describe('per-feature depth controls', () => {

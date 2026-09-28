@@ -6,7 +6,7 @@ import { polygonPathData, smoothPathData, simplifyPolygon, smoothEpsilon } from 
 import { GRID_UNIT, DISPLAY_SCALE } from '@/lib/constants'
 import { CutoutOverlay } from '@/components/CutoutOverlay'
 
-type Tool = 'select' | 'text'
+type Tool = 'select' | 'text' | 'cutout'
 
 type Selection =
   | { type: 'tool'; toolId: string }
@@ -213,7 +213,7 @@ export function BinEditorCanvas({
                   strokeWidth={handleStroke}
                   strokeDasharray={isOversized ? '8,5' : undefined}
                   aria-label={isOversized ? `${tool.name} may be clipped outside the printable area` : undefined}
-                  className={activeTool === 'text' ? 'cursor-crosshair' : 'cursor-move'}
+                  className={activeTool === 'select' ? 'cursor-move' : 'cursor-crosshair'}
                   onMouseDown={handleToolMouseDown(tool.id)}
                   onClick={stopClickUnlessText}
                 />

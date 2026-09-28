@@ -25,6 +25,8 @@ def _probe_values() -> dict:
         args = get_args(ann)
         if origin is Literal:
             values[name] = next(a for a in args if a != field.default)
+        elif ann is bool:
+            values[name] = True
         elif ann is str or (origin in (Union, UnionType) and str in args):
             values[name] = f"{name}-probe"
         else:

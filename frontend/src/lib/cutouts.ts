@@ -7,6 +7,7 @@ export const MIN_CUTOUT_SIZE_MM = 1
 const CUTOUT_SHAPE_LABELS: Record<CutoutShape, string> = {
   circle: 'circle',
   cylinder: 'cylinder',
+  scoop: 'finger scoop',
   square: 'square',
   rectangle: 'rectangle',
   filleted_rectangle: 'filleted rectangle',

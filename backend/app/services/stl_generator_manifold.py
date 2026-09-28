@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 from app.constants import GF_GRID
 
 # Bump when geometry changes so saved previews and exports regenerate.
-STL_GEOMETRY_VERSION = 2
+STL_GEOMETRY_VERSION = 3
 
 GF_HALF_GRID = GF_GRID / 2  # 21mm
 GF_HEIGHT_UNIT = 7.0
@@ -979,6 +979,8 @@ def _make_finger_holes(
     cutters = []
     for poly in polygons:
         for fh in poly.finger_holes:
+            if getattr(fh, 'disabled', False):
+                continue
             fh_x = fh.x_mm + offset_x
             fh_y = -(fh.y_mm + offset_y)
             shape = getattr(fh, 'shape', 'circle')
@@ -1001,6 +1003,21 @@ def _make_finger_holes(
                         mf.Manifold.cylinder(pocket_depth + 0.01, r, circular_segments=ROUND_SEGS)
                         .translate((fh_x, fh_y, wall_top_z - pocket_depth))
                     )
+                elif shape == 'scoop':
+                    # A broad lip admits a fingertip while the flat floor reaches
+                    # the requested depth even when the radius is small.
+                    r = fh.radius_mm
+                    bevel = min(r * 0.3, pocket_depth * 0.45)
+                    core_r = r - bevel
+                    core = mf.Manifold.cylinder(
+                        pocket_depth - bevel + 0.01, core_r,
+                        circular_segments=ROUND_SEGS,
+                    ).translate((fh_x, fh_y, wall_top_z - pocket_depth))
+                    lip = mf.Manifold.extrude(
+                        mf.CrossSection.circle(core_r, circular_segments=ROUND_SEGS),
+                        bevel + 0.01, scale_top=(r / core_r, r / core_r),
+                    ).translate((fh_x, fh_y, wall_top_z - bevel))
+                    cutter = core + lip
                 elif shape == 'square':
                     size = fh.radius_mm * 2
                     cut_z = wall_top_z - pocket_depth / 2
@@ -1053,6 +1070,8 @@ def _make_finger_hole_chamfers(
     cutters = []
     for poly in polygons:
         for fh in poly.finger_holes:
+            if getattr(fh, 'disabled', False):
+                continue
             fh_x = fh.x_mm + offset_x
             fh_y = -(fh.y_mm + offset_y)
             shape = getattr(fh, 'shape', 'circle')
@@ -1063,6 +1082,8 @@ def _make_finger_hole_chamfers(
             if eff_chamfer <= 0:
                 continue
             try:
+                if shape == 'scoop':
+                    continue  # the scoop already has its own tapered lip
                 if shape == 'circle' or shape == 'cylinder':
                     r = fh.radius_mm
                     cs = mf.CrossSection.circle(r, circular_segments=ROUND_SEGS)

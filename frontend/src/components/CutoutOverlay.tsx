@@ -16,7 +16,7 @@ interface Props {
 export function CutoutOverlay({ holes, zoom = 1, interactive, selectedId, editMode, defaultCutoutDepth = DEFAULT_CUTOUT_DEPTH, onMouseDown, onClick }: Props) {
   return (
     <>
-      {holes.map(fh => {
+      {holes.filter(fh => !fh.disabled).map(fh => {
         const x = fh.x * DISPLAY_SCALE
         const y = fh.y * DISPLAY_SCALE
         const r = fh.radius * DISPLAY_SCALE
@@ -41,7 +41,7 @@ export function CutoutOverlay({ holes, zoom = 1, interactive, selectedId, editMo
 
         return (
           <g key={fh.id} transform={rotation !== 0 ? `rotate(${rotation} ${x} ${y})` : undefined}>
-            {(shape === 'circle' || shape === 'cylinder') && (
+            {(shape === 'circle' || shape === 'cylinder' || shape === 'scoop') && (
               <circle
                 cx={x} cy={y} r={r}
                 fill={fill} stroke={stroke} strokeWidth={strokeWidth}
@@ -50,9 +50,9 @@ export function CutoutOverlay({ holes, zoom = 1, interactive, selectedId, editMo
                 onClick={interactive && onClick ? onClick : undefined}
               />
             )}
-            {shape === 'cylinder' && (
+            {(shape === 'cylinder' || shape === 'scoop') && (
               <circle
-                cx={x} cy={y} r={Math.max(0.5, r * 0.35)}
+                cx={x} cy={y} r={Math.max(0.5, r * (shape === 'scoop' ? 0.7 : 0.35))}
                 fill="none" stroke={stroke} strokeWidth={strokeWidth}
                 className="pointer-events-none"
               />

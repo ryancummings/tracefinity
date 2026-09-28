@@ -124,7 +124,7 @@ export function ToolEditorToolbar({
                 <div className="fixed inset-0 z-10" onClick={() => setCutoutOpen(false)} />
                 <div className="absolute top-full left-0 mt-1 bg-elevated border border-border rounded-lg shadow-lg z-20 py-1 min-w-[210px]">
                   {([
-                    { mode: 'finger-hole' as EditMode, icon: <Fingerprint className="w-4 h-4" />, label: 'Finger hole', size: '15mm' },
+                    { mode: 'finger-hole' as EditMode, icon: <Fingerprint className="w-4 h-4" />, label: 'Finger scoop', size: 'saved size' },
                     { mode: 'circle' as EditMode, icon: <Circle className="w-4 h-4" />, label: 'Circle (sphere)', size: '10mm' },
                     { mode: 'cylinder' as EditMode, icon: <Disc className="w-4 h-4" />, label: 'Cylinder (flat)', size: '10mm' },
                     { mode: 'square' as EditMode, icon: <Square className="w-4 h-4" />, label: 'Square', size: '20mm' },

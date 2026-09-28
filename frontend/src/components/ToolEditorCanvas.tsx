@@ -319,7 +319,7 @@ export function ToolEditorCanvas({
             const h = isRectangular && fh.height ? fh.height * DISPLAY_SCALE : r * 2
             const s = zvbW / 800
             const handleR = 10 * s
-            const topEdge = shape === 'circle' || shape === 'cylinder' ? r : h / 2
+            const topEdge = shape === 'circle' || shape === 'cylinder' || shape === 'scoop' ? r : h / 2
             const hr = 18 * s
 
             if (isRectangular) {

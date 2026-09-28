@@ -20,6 +20,7 @@ import { ToolEditorCanvas } from '@/components/ToolEditorCanvas'
 import type { EditMode, Selection } from '@/components/ToolEditorToolbar'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
+import { getCutoutDefaults } from '@/lib/settings'
 
 interface Props {
   points: Point[]
@@ -459,12 +460,12 @@ export function ToolEditor({ points, fingerHoles, interiorRings, smoothed, smoot
   const createCutout = (xMm: number, yMm: number): FingerHole | null => {
     const base = { id: `fh-${Date.now()}`, x: xMm, y: yMm, rotation: 0 }
     switch (editMode) {
-      case 'finger-hole': return { ...base, radius: 15, shape: 'circle' as const }
-      case 'circle': return { ...base, radius: 10, shape: 'circle' as const }
-      case 'cylinder': return { ...base, radius: 10, shape: 'cylinder' as const }
-      case 'square': return { ...base, radius: 10, shape: 'square' as const }
-      case 'rectangle': return { ...base, radius: 15, width: 30, height: 20, shape: 'rectangle' as const }
-      case 'filleted_rectangle': return { ...base, radius: 15, width: 30, height: 20, shape: 'filleted_rectangle' as const }
+      case 'finger-hole': return { ...base, ...getCutoutDefaults('scoop'), shape: 'scoop' as const }
+      case 'circle': return { ...base, ...getCutoutDefaults('circle'), shape: 'circle' as const }
+      case 'cylinder': return { ...base, ...getCutoutDefaults('cylinder'), shape: 'cylinder' as const }
+      case 'square': return { ...base, ...getCutoutDefaults('square'), shape: 'square' as const }
+      case 'rectangle': return { ...base, ...getCutoutDefaults('rectangle'), shape: 'rectangle' as const }
+      case 'filleted_rectangle': return { ...base, ...getCutoutDefaults('filleted_rectangle'), shape: 'filleted_rectangle' as const }
       default: return null
     }
   }

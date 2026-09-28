@@ -51,6 +51,19 @@ def _has_point(profile, x: float, y: float, tol: float = 1e-9) -> bool:
 
 
 class TestCylinderShape:
+    def test_scoop_reaches_full_depth_with_wide_tapered_opening(self):
+        poly = _scaled_poly_with_hole("scoop", radius=10)
+        result = _make_finger_holes(
+            [poly], BinParams(cutout_depth=15), wall_top_z=30,
+            max_depth=15, offset_x=0, offset_y=0,
+        )
+        assert result is not None
+        box = result.bounding_box()
+        assert abs(box[2] - 15) < 0.05
+        assert abs(box[5] - 30) < 0.05
+        assert box[3] - box[0] > 19.5
+        assert result.volume() > 0
+
     def test_cylinder_produces_cutter(self):
         poly = _scaled_poly_with_hole("cylinder")
         config = BinParams(cutout_depth=15.0)
