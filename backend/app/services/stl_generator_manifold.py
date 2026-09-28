@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 from app.constants import GF_GRID
 
 # Bump when geometry changes so saved previews and exports regenerate.
-STL_GEOMETRY_VERSION = 3
+STL_GEOMETRY_VERSION = 4
 
 GF_HALF_GRID = GF_GRID / 2  # 21mm
 GF_HEIGHT_UNIT = 7.0
@@ -1023,7 +1023,7 @@ def _make_finger_holes(
                     cut_z = wall_top_z - pocket_depth / 2
                     cutter = (
                         mf.Manifold.cube((size, size, pocket_depth + 0.01), center=True)
-                        .rotate((0.0, 0.0, rotation))
+                        .rotate((0.0, 0.0, -rotation))
                         .translate((fh_x, fh_y, cut_z))
                     )
                 elif shape == 'rectangle':
@@ -1032,14 +1032,14 @@ def _make_finger_holes(
                     cut_z = wall_top_z - pocket_depth / 2
                     cutter = (
                         mf.Manifold.cube((w, h, pocket_depth + 0.01), center=True)
-                        .rotate((0.0, 0.0, rotation))
+                        .rotate((0.0, 0.0, -rotation))
                         .translate((fh_x, fh_y, cut_z))
                     )
                 elif shape == 'filleted_rectangle':
                     w = fh.width_mm if fh.width_mm else fh.radius_mm * 2
                     h = fh.height_mm if fh.height_mm else fh.radius_mm * 2
                     cutter = _make_filleted_rectangle_cutter(
-                        w, h, pocket_depth, wall_top_z, rotation, fh_x, fh_y
+                        w, h, pocket_depth, wall_top_z, -rotation, fh_x, fh_y
                     )
                 else:
                     continue
@@ -1092,14 +1092,14 @@ def _make_finger_hole_chamfers(
                     size = fh.radius_mm * 2
                     cs = mf.CrossSection.square((size, size), center=True)
                     if rotation:
-                        cs = cs.rotate(rotation)
+                        cs = cs.rotate(-rotation)
                     cs_outer = cs.offset(eff_chamfer, mf.JoinType.Round)
                 elif shape == 'rectangle' or shape == 'filleted_rectangle':
                     w = fh.width_mm if fh.width_mm else fh.radius_mm * 2
                     h = fh.height_mm if fh.height_mm else fh.radius_mm * 2
                     cs = mf.CrossSection.square((w, h), center=True)
                     if rotation:
-                        cs = cs.rotate(rotation)
+                        cs = cs.rotate(-rotation)
                     cs_outer = cs.offset(eff_chamfer, mf.JoinType.Round)
                 else:
                     continue

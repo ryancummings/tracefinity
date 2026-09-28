@@ -33,7 +33,7 @@ Once placed:
 - Per-hole depth override (overrides the bin's cutout depth for this hole only).
 - Select a hole and click Delete to remove it.
 
-The bin editor also places cutouts on individual tool placements. Pick Cutout and a shape, then click the tool. Select a cutout to drag it, change its shape and size, set its depth, or remove it. These changes belong to that bin; source tool cutouts still update other bins. Select a tool in the bin editor to override its pocket depth. Settings also holds the default text size and new-bin options.
+The bin editor also places cutouts on individual tool placements. Choose Add cutout, select the tool that will own it, then click where the cutout should go. The target tool is highlighted and named while you place cutouts. Select a cutout to drag it or use its inspector to change its shape, dimensions, position, rotation, and depth. Round cutouts also have a drag handle for resizing. These changes belong to that bin; source tool cutouts still update other bins. Select a tool in the bin editor to override its pocket depth. Settings holds saved cutout sizes, default text size, and new-bin options.
 
 ## Smooth vs Accurate
 

@@ -73,6 +73,17 @@ class TestSyncPreservesOverrides:
         sync_placed_tools(bin_data, _Store([_make_source_tool("tool1")]))
         assert bin_data.placed_tools[0].finger_holes[0].disabled
 
+    def test_source_rectangle_orientation_tracks_placed_tool(self):
+        tool = _make_source_tool()
+        tool.finger_holes[0].shape = "rectangle"
+        tool.finger_holes[0].width = 12
+        tool.finger_holes[0].height = 5
+        tool.finger_holes[0].rotation = 15
+        bin_data = _make_bin_with_placed("tool1", ["h1"])
+        bin_data.placed_tools[0].rotation = 30
+        sync_placed_tools(bin_data, _Store([tool]))
+        assert bin_data.placed_tools[0].finger_holes[0].rotation == 45
+
     def test_per_hole_depth_override_survives_sync(self):
         bin_data = _make_bin_with_placed("tool1", ["h1"], hole_depth_overrides={"h1": 25.0})
         tools = _Store([_make_source_tool("tool1", ("h1",))])

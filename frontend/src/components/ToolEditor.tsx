@@ -799,7 +799,7 @@ export function ToolEditor({ points, fingerHoles, interiorRings, smoothed, smoot
     : editMode === 'filleted_rectangle' ? <RectangleHorizontal className="w-4.5 h-4.5" />
     : <Plus className="w-4.5 h-4.5" />
 
-  const cutoutModeLabel = editMode === 'finger-hole' ? 'Finger hole'
+  const cutoutModeLabel = editMode === 'finger-hole' ? 'Finger scoop'
     : editMode === 'circle' ? 'Circle'
     : editMode === 'cylinder' ? 'Cylinder'
     : editMode === 'square' ? 'Square'

@@ -63,6 +63,31 @@ class TestCylinderShape:
         assert abs(box[5] - 30) < 0.05
         assert box[3] - box[0] > 19.5
         assert result.volume() > 0
+        floor = result.slice(16).bounds()
+        lip = result.slice(29.9).bounds()
+        assert 13.9 < floor[2] - floor[0] < 14.1
+        assert lip[2] - lip[0] > 19.5
+
+    def test_shallow_scoop_limits_taper_to_depth(self):
+        poly = _scaled_poly_with_hole("scoop", radius=10)
+        result = _make_finger_holes(
+            [poly], BinParams(cutout_depth=5), wall_top_z=30,
+            max_depth=5, offset_x=0, offset_y=0,
+        )
+        assert result is not None
+        floor = result.slice(25.1).bounds()
+        assert 15.4 < floor[2] - floor[0] < 15.6  # core radius 10 - 0.45*5
+
+    def test_rotated_rectangle_follows_svg_y_down_rotation(self):
+        poly = _scaled_poly_with_rectangle_hole("rectangle", width=30, height=10, rotation=30)
+        result = _make_finger_holes(
+            [poly], BinParams(cutout_depth=10), wall_top_z=30,
+            max_depth=10, offset_x=0, offset_y=0,
+        )
+        points = result.slice(25).to_polygons()[0]
+        edges = [(points[(i + 1) % len(points)] - point) for i, point in enumerate(points)]
+        long_edge = max(edges, key=lambda edge: edge[0] ** 2 + edge[1] ** 2)
+        assert long_edge[0] * long_edge[1] < 0  # +30° SVG becomes -30° in manifold
 
     def test_cylinder_produces_cutter(self):
         poly = _scaled_poly_with_hole("cylinder")

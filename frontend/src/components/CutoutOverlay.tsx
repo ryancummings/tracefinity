@@ -1,6 +1,6 @@
 import type { FingerHole } from '@/types'
 import { DEFAULT_CUTOUT_DEPTH, DISPLAY_SCALE } from '@/lib/constants'
-import { filletedRectangleRadius, isFilletedRectangleCutout, isRectangularCutout } from '@/lib/cutouts'
+import { filletedRectangleRadius, isFilletedRectangleCutout, isRectangularCutout, scoopCoreRadius } from '@/lib/cutouts'
 
 interface Props {
   holes: FingerHole[]
@@ -9,11 +9,13 @@ interface Props {
   selectedId?: string
   editMode?: string
   defaultCutoutDepth?: number
+  maxCutoutDepth?: number
+  insertAllowance?: number
   onMouseDown?: (id: string, e: React.MouseEvent) => void
   onClick?: (e: React.MouseEvent) => void
 }
 
-export function CutoutOverlay({ holes, zoom = 1, interactive, selectedId, editMode, defaultCutoutDepth = DEFAULT_CUTOUT_DEPTH, onMouseDown, onClick }: Props) {
+export function CutoutOverlay({ holes, zoom = 1, interactive, selectedId, editMode, defaultCutoutDepth, maxCutoutDepth, insertAllowance = 0, onMouseDown, onClick }: Props) {
   return (
     <>
       {holes.filter(fh => !fh.disabled).map(fh => {
@@ -31,7 +33,8 @@ export function CutoutOverlay({ holes, zoom = 1, interactive, selectedId, editMo
         const fill = isSelected ? 'rgb(30, 41, 59)' : 'rgb(51, 65, 85)'
         const stroke = isSelected ? 'rgb(90, 180, 222)' : 'rgb(30, 41, 59)'
         const strokeWidth = (isSelected ? 3 : 1) / zoom
-        const cutoutDepth = (fh.depth_override ?? defaultCutoutDepth) * DISPLAY_SCALE
+        const requestedDepth = (fh.depth_override ?? defaultCutoutDepth ?? DEFAULT_CUTOUT_DEPTH) + insertAllowance
+        const cutoutDepth = (maxCutoutDepth === undefined ? requestedDepth : Math.min(maxCutoutDepth, Math.max(5, requestedDepth))) * DISPLAY_SCALE
         const filletR = filletedRectangleRadius(w, cutoutDepth)
         const left = x - w / 2
         const right = x + w / 2
@@ -50,9 +53,9 @@ export function CutoutOverlay({ holes, zoom = 1, interactive, selectedId, editMo
                 onClick={interactive && onClick ? onClick : undefined}
               />
             )}
-            {(shape === 'cylinder' || shape === 'scoop') && (
+            {(shape === 'cylinder' || (shape === 'scoop' && defaultCutoutDepth !== undefined)) && (
               <circle
-                cx={x} cy={y} r={Math.max(0.5, r * (shape === 'scoop' ? 0.7 : 0.35))}
+                cx={x} cy={y} r={Math.max(0.5, shape === 'scoop' ? scoopCoreRadius(r, cutoutDepth) : r * 0.35)}
                 fill="none" stroke={stroke} strokeWidth={strokeWidth}
                 className="pointer-events-none"
               />

@@ -50,9 +50,11 @@ export default function SettingsPage() {
             <div key={key} className="rounded-lg border border-border p-3">
               <h3 className="text-sm font-medium mb-2">{label}</h3>
               <div className="flex flex-wrap gap-4">
-                <label className="text-xs text-text-muted flex items-center gap-2">{cutouts[key].width ? 'Fallback radius' : 'Radius / half side'}
-                  <NumericInput value={cutouts[key].radius} min={0.5} max={100} step={0.5} onChange={v => updateCutout(key, 'radius', v)} className="w-16 bg-elevated rounded px-2 py-1 text-text-primary" />
-                </label>
+                {cutouts[key].width === undefined && (
+                  <label className="text-xs text-text-muted flex items-center gap-2">{key === 'square' ? 'Side' : 'Diameter'}
+                    <NumericInput value={cutouts[key].radius * 2} min={1} max={200} step={0.5} onChange={v => updateCutout(key, 'radius', v / 2)} className="w-16 bg-elevated rounded px-2 py-1 text-text-primary" /> mm
+                  </label>
+                )}
                 {(['width', 'height'] as const).map(dim => cutouts[key][dim] !== undefined && (
                   <label key={dim} className="text-xs text-text-muted flex items-center gap-2 capitalize">{dim}
                     <NumericInput value={cutouts[key][dim] ?? 1} min={1} max={200} step={0.5} onChange={v => updateCutout(key, dim, v)} className="w-16 bg-elevated rounded px-2 py-1 text-text-primary" />

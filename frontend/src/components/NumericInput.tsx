@@ -41,8 +41,9 @@ export function NumericInput({ value, min, max, step = 1, onChange, className, d
     const result = clampNumericValue(raw, min, max, step, committedRef.current)
     setText(String(result))
     if (raw.trim() !== '') {
+      const changed = result !== committedRef.current
       committedRef.current = result
-      onChange(result)
+      if (changed) onChange(result)
     }
   }, [min, max, step, onChange])
 

@@ -43,7 +43,7 @@ export function SettingsPopover() {
 
   return (
     <div ref={ref} className="relative">
-      <IconButton onClick={() => setOpen(!open)} title="Settings">
+      <IconButton onClick={() => { if (!open) setBedSize(getSettings().bedSize); setOpen(!open) }} title="Settings">
         <Settings className="w-4 h-4" />
       </IconButton>
 

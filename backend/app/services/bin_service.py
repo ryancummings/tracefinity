@@ -45,6 +45,7 @@ def sync_placed_tools(bin_data, user_tools) -> bool:
             ry = (fh.x - lib_cx) * sin_r + (fh.y - lib_cy) * cos_r
             new_fh.append(fh.model_copy(update={
                 "x": placed_cx + rx, "y": placed_cy + ry,
+                "rotation": fh.rotation + pt.rotation,
                 "depth_override": existing.depth_override if existing else fh.depth_override,
             }))
         # Bin-created holes belong to this placement and have no library peer.

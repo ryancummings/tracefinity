@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { MousePointer2, Trash2, Magnet, Type, Pencil, Maximize2 } from 'lucide-react'
-import type { CutoutShape, FingerHole, PlacedTool, TextLabel } from '@/types'
+import type { CutoutShape, PlacedTool, TextLabel } from '@/types'
 import { SNAP_GRID_MIN, SNAP_GRID_MAX } from '@/lib/constants'
-import { cutoutShapeLabel, isRectangularCutout } from '@/lib/cutouts'
 import { NumericInput } from '@/components/NumericInput'
 
 interface DepthInputProps {
@@ -73,11 +72,12 @@ function DepthInput({ value, defaultDepth, maxDepth, onCommit, resetKey }: Depth
   )
 }
 
-type Tool = 'select' | 'text' | 'cutout'
+type Tool = 'select' | 'text' | 'choose-cutout-tool' | 'cutout'
 
 interface Props {
   activeTool: Tool
   setActiveTool: (tool: Tool) => void
+  onStartCutout: () => void
   snapEnabled: boolean
   setSnapEnabled: (enabled: boolean) => void
   snapGrid: number
@@ -85,8 +85,6 @@ interface Props {
   handleRecenter: () => void
   selectedTool: PlacedTool | null
   selectedLabel: TextLabel | null
-  selectedHole: FingerHole | null
-  selectedHoleToolId: string | null
   onEditTool?: (toolId: string) => void
   onRemoveTool: () => void
   onRemoveLabel: () => void
@@ -98,11 +96,8 @@ interface Props {
   defaultCutoutDepth: number
   maxCutoutDepth: number
   onSetCutoutDepthOverride: (toolId: string, depth: number | null) => void
-  onSetHoleDepthOverride: (toolId: string, holeId: string, depth: number | null) => void
   cutoutShape: CutoutShape
   onCutoutShapeChange: (shape: CutoutShape) => void
-  onUpdateHole: (updates: Partial<FingerHole>) => void
-  onRemoveHole: () => void
 }
 
 const tbBtn = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-[7px] text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap'
@@ -112,6 +107,7 @@ const tbInactive = 'text-text-muted hover:text-text-secondary hover:bg-[rgba(255
 export function BinEditorToolbar({
   activeTool,
   setActiveTool,
+  onStartCutout,
   snapEnabled,
   setSnapEnabled,
   snapGrid,
@@ -119,8 +115,6 @@ export function BinEditorToolbar({
   handleRecenter,
   selectedTool,
   selectedLabel,
-  selectedHole,
-  selectedHoleToolId,
   onEditTool,
   onRemoveTool,
   onRemoveLabel,
@@ -132,11 +126,8 @@ export function BinEditorToolbar({
   defaultCutoutDepth,
   maxCutoutDepth,
   onSetCutoutDepthOverride,
-  onSetHoleDepthOverride,
   cutoutShape,
   onCutoutShapeChange,
-  onUpdateHole,
-  onRemoveHole,
 }: Props) {
   return (
     <>
@@ -157,8 +148,8 @@ export function BinEditorToolbar({
         Text
       </button>
       <label className="text-[11px] text-text-muted flex items-center gap-1">
-        <button onClick={() => setActiveTool('cutout')} className={`${tbBtn} ${activeTool === 'cutout' ? tbActive : tbInactive}`} title="Place cutout on a tool">Cutout</button>
-        <select aria-label="Cutout shape" value={cutoutShape} onChange={e => { onCutoutShapeChange(e.target.value as CutoutShape); setActiveTool('cutout') }} className="bg-elevated text-text-primary rounded px-1 py-1">
+        <button onClick={onStartCutout} className={`${tbBtn} ${activeTool === 'cutout' || activeTool === 'choose-cutout-tool' ? tbActive : tbInactive}`} title="Add cutout to a tool">Add cutout</button>
+        <select aria-label="Cutout shape" value={cutoutShape} onChange={e => onCutoutShapeChange(e.target.value as CutoutShape)} className="bg-elevated text-text-primary rounded px-1 py-1">
           <option value="scoop">Finger scoop</option><option value="circle">Sphere</option><option value="cylinder">Cylinder</option><option value="square">Square</option><option value="rectangle">Rectangle</option><option value="filleted_rectangle">Filleted rectangle</option>
         </select>
       </label>
@@ -305,44 +296,6 @@ export function BinEditorToolbar({
         </>
       )}
 
-      {selectedHole && selectedHoleToolId && (
-        <>
-          <div className="w-px h-4 bg-glass-border mx-1 flex-shrink-0" />
-          <span className="text-[10px] text-text-muted">
-            {cutoutShapeLabel(selectedHole.shape)}
-            {isRectangularCutout(selectedHole.shape) && selectedHole.width && selectedHole.height
-              ? ` ${selectedHole.width.toFixed(0)}×${selectedHole.height.toFixed(0)}mm`
-              : selectedHole.shape === 'square'
-              ? ` ${(selectedHole.radius * 2).toFixed(0)}mm`
-              : ` r=${selectedHole.radius.toFixed(1)}mm`}
-          </span>
-          <select aria-label="Selected cutout shape" value={selectedHole.shape ?? 'circle'} onChange={e => onUpdateHole({ shape: e.target.value as CutoutShape, bin_override: true })} className="bg-elevated text-text-primary text-[10px] rounded px-1 py-1">
-            <option value="scoop">Finger scoop</option><option value="circle">Sphere</option><option value="cylinder">Cylinder</option><option value="square">Square</option><option value="rectangle">Rectangle</option><option value="filleted_rectangle">Filleted rectangle</option>
-          </select>
-          <label className="text-[10px] text-text-muted flex items-center gap-1">Radius
-            <NumericInput value={selectedHole.radius} min={0.5} max={100} step={0.5} onChange={v => onUpdateHole({ radius: v, bin_override: true })} className="w-12 bg-elevated text-text-primary rounded px-1 py-1" />
-          </label>
-          {isRectangularCutout(selectedHole.shape) && (['width', 'height'] as const).map(dim => (
-            <label key={dim} className="text-[10px] text-text-muted flex items-center gap-1 capitalize">{dim}
-              <NumericInput value={selectedHole[dim] ?? selectedHole.radius * 2} min={1} max={200} step={0.5} onChange={v => onUpdateHole({ [dim]: v, bin_override: true })} className="w-12 bg-elevated text-text-primary rounded px-1 py-1" />
-            </label>
-          ))}
-          <div
-            className="flex items-center gap-1 text-[10px] text-text-muted"
-            title={`Cutout depth (mm). Default: ${Math.min(maxCutoutDepth, Math.max(5, defaultCutoutDepth)).toFixed(2)}mm. Max: ${maxCutoutDepth.toFixed(2)}mm. Set deeper than the tool to clear protruding features.`}
-          >
-            <span>Depth</span>
-            <DepthInput
-              value={selectedHole.depth_override}
-              defaultDepth={defaultCutoutDepth}
-              maxDepth={maxCutoutDepth}
-              onCommit={(d) => onSetHoleDepthOverride(selectedHoleToolId, selectedHole.id, d)}
-              resetKey={`hole:${selectedHoleToolId}:${selectedHole.id}`}
-            />
-          </div>
-          <button onClick={onRemoveHole} data-delete-shortcut aria-label="Remove cutout" className={`${tbBtn} text-red-400 hover:bg-red-900/20`}><Trash2 className="w-3 h-3" /></button>
-        </>
-      )}
     </>
   )
 }

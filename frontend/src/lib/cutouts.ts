@@ -25,6 +25,10 @@ export function filletedRectangleRadius(width: number, cutoutDepth: number): num
   return Math.max(0, Math.min(width / 3, cutoutDepth / 2))
 }
 
+export function scoopCoreRadius(radius: number, depth: number): number {
+  return radius - Math.min(radius * 0.3, depth * 0.45)
+}
+
 export function cutoutShapeLabel(shape?: CutoutShape): string {
   return shape ? CUTOUT_SHAPE_LABELS[shape] : CUTOUT_SHAPE_LABELS.circle
 }
