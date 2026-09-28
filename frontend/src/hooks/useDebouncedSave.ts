@@ -63,12 +63,15 @@ export function useDebouncedSave(
     if (pending) await pending()
   }, [])
 
-  // flush pending save on page unload
+  // In-app navigation unmounts the editor without firing beforeunload.
   useEffect(() => {
-    const onUnload = () => { pendingSaveRef.current?.() }
+    const onUnload = () => { void flush() }
     window.addEventListener('beforeunload', onUnload)
-    return () => window.removeEventListener('beforeunload', onUnload)
-  }, [])
+    return () => {
+      window.removeEventListener('beforeunload', onUnload)
+      void flush()
+    }
+  }, [flush])
 
   return { saving, saved, saveCount, error, flush }
 }

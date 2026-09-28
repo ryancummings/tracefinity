@@ -29,8 +29,11 @@ vi.mock('@/lib/api', () => ({
 }))
 
 vi.mock('@/components/BinEditor', () => ({
-  BinEditor: ({ placedTools }: { placedTools: PlacedTool[] }) => (
-    <output data-testid="placed-rings">{JSON.stringify(placedTools[0]?.interior_rings)}</output>
+  BinEditor: ({ placedTools, oversizedToolIds }: { placedTools: PlacedTool[]; oversizedToolIds: Set<string> }) => (
+    <>
+      <output data-testid="placed-rings">{JSON.stringify(placedTools[0]?.interior_rings)}</output>
+      <output data-testid="oversized-tools">{[...oversizedToolIds].join(',')}</output>
+    </>
   ),
 }))
 
@@ -113,6 +116,9 @@ describe('bin reload', () => {
     await waitFor(() => expect(screen.getByTestId('auto-size').textContent).toBe('false'))
     fireEvent.click(screen.getByRole('button', { name: 'Add large tool' }))
     expect(screen.getByTestId('grid-size').textContent).toBe('4x3')
+    expect(screen.getByTestId('oversized-tools').textContent).toBe('large-placement')
+    expect(screen.getByText(/1 tool may be clipped/)).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('Export')).toBeTruthy())
   })
 
   it('preserves the dimensions of bins saved before auto-size mode existed', async () => {

@@ -25,6 +25,7 @@ import {
 } from '@/lib/constants'
 import { useTheme } from '@/hooks/useTheme'
 import { cn } from '@/lib/utils'
+import { toolsOutsidePrintableArea } from '@/lib/binSizing'
 
 function InfoBanner({ children }: { children: React.ReactNode }) {
   const { theme } = useTheme()
@@ -69,6 +70,7 @@ export default function BinPage() {
   const [autoSize, setAutoSize] = useState(true)
   const [isDragging, setIsDragging] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const oversizedToolIds = useMemo(() => toolsOutsidePrintableArea(placedTools, config), [placedTools, config])
   const [defaultsStatus, setDefaultsStatus] = useState<string | null>(null)
   const defaultsStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const exportRef = useRef<HTMLDivElement>(null)
@@ -561,6 +563,7 @@ export default function BinPage() {
             <div className="absolute inset-0">
               <BinEditor
                 placedTools={placedTools}
+                oversizedToolIds={oversizedToolIds}
                 onPlacedToolsChange={handlePlacedToolsChange}
                 textLabels={textLabels}
                 onTextLabelsChange={setTextLabels}
@@ -588,6 +591,12 @@ export default function BinPage() {
                 <span>{config.grid_x}x{config.grid_y} Grid ({binW} x {binH} mm)</span>
                 {placedTools.length > 0 && (
                   <span>· {placedTools.length} tool{placedTools.length !== 1 ? 's' : ''} placed</span>
+                )}
+                {oversizedToolIds.size > 0 && (
+                  <span className="inline-flex items-center gap-1 text-amber-400" role="status">
+                    <TriangleAlert className="w-3 h-3" />
+                    {oversizedToolIds.size} tool{oversizedToolIds.size !== 1 ? 's' : ''} may be clipped (amber outline)
+                  </span>
                 )}
               </div>
             </div>

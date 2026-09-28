@@ -9,6 +9,7 @@ import { BinEditorCanvas } from '@/components/BinEditorCanvas'
 
 interface Props {
   placedTools: PlacedTool[]
+  oversizedToolIds?: Set<string>
   onPlacedToolsChange: (tools: PlacedTool[]) => void
   textLabels: TextLabel[]
   onTextLabelsChange: (labels: TextLabel[]) => void
@@ -45,6 +46,7 @@ type DragState =
 
 export function BinEditor({
   placedTools,
+  oversizedToolIds,
   onPlacedToolsChange,
   textLabels,
   onTextLabelsChange,
@@ -549,6 +551,7 @@ export function BinEditor({
         partialBinsValues={partialBinsValues}
         wallThickness={wallThickness}
         placedTools={placedTools}
+        oversizedToolIds={oversizedToolIds}
         selection={selection}
         onHoleClick={handleHoleClick}
         textLabels={textLabels}
