@@ -22,7 +22,7 @@ export function BinToolInspector({ tool, binDepth, maxDepth, smoothed, smoothLev
   const effectiveDepth = clampDepth(tool.depth_override ?? binDepth)
 
   return (
-    <aside aria-label="Tool settings" className="absolute right-3 top-16 z-20 w-60 max-h-[calc(100%-5rem)] overflow-y-auto glass rounded-xl p-3 shadow-xl text-text-primary">
+    <aside aria-label="Tool settings" className="absolute right-3 top-16 z-20 w-60 max-h-[calc(100%-5rem)] overflow-y-auto rounded-xl border border-border bg-surface p-3 shadow-xl text-text-primary">
       <h3 className="text-sm font-semibold mb-1">{tool.name}</h3>
       <p className="text-[11px] text-text-muted mb-3">Settings for this tool in this bin.</p>
       <label className="flex items-center justify-between text-xs gap-2">Tool pocket depth (mm)

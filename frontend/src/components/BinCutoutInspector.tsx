@@ -34,7 +34,7 @@ export function BinCutoutInspector({ hole, tool, binDepth, maxDepth, onUpdate, o
   }
 
   return (
-    <aside aria-label="Cutout settings" className="absolute right-3 top-16 z-20 w-60 max-h-[calc(100%-5rem)] overflow-y-auto glass rounded-xl p-3 shadow-xl text-text-primary">
+    <aside aria-label="Cutout settings" className="absolute right-3 top-16 z-20 w-60 max-h-[calc(100%-5rem)] overflow-y-auto rounded-xl border border-border bg-surface p-3 shadow-xl text-text-primary">
       <div className="mb-3">
         <h3 className="text-sm font-semibold">Cutout for {tool.name}</h3>
         <p className="text-[11px] text-text-muted">Drag the cutout to move it. Drag its edge handle to resize round cutouts.</p>
