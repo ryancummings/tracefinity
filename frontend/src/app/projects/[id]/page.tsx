@@ -652,6 +652,7 @@ export default function ProjectPage() {
                   </button>
                   <button
                     onClick={() => handleRemoveTool(tool.id)}
+                    data-delete-shortcut
                     disabled={saving}
                     className="btn-danger-icon flex-shrink-0"
                     title="Remove from project"
@@ -879,6 +880,7 @@ export default function ProjectPage() {
                       </button>
                       <button
                         onClick={() => requestBinDelete(bin.id)}
+                        data-delete-shortcut
                         disabled={saving}
                         className="btn-danger-icon"
                         title="Delete bin"
@@ -978,6 +980,7 @@ export default function ProjectPage() {
                     <LayoutGrid className="w-4 h-4 text-text-muted flex-shrink-0" />
                     <button
                       onClick={() => requestSketchDelete(sketch.id)}
+                      data-delete-shortcut
                       disabled={saving}
                       className="btn-danger-icon flex-shrink-0"
                       title="Delete drawer plan"

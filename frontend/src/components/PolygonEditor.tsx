@@ -5,6 +5,7 @@ import type { Point, Polygon } from '@/types'
 import { Undo2, Redo2, Trash2, Plus, Minus, Move } from 'lucide-react'
 import { polygonPathData } from '@/lib/svg'
 import { useHistory } from '@/hooks/useHistory'
+import { useDeleteShortcut } from '@/hooks/useDeleteShortcut'
 import { ZOOM_FACTOR } from '@/lib/constants'
 import { clampZoom, zoomedViewBox, viewBoxPoint, zoomAtCursor, uiScaleFor } from '@/lib/viewbox'
 
@@ -377,6 +378,8 @@ export function PolygonEditor({
     }
   }
 
+  useDeleteShortcut(() => { if (activeId) handleDeletePolygon(activeId) }, editable && activeId !== null)
+
   // auto-activate first included polygon when switching to edit modes
   const handleModeChange = (mode: EditMode) => {
     setEditMode(mode)
@@ -424,6 +427,7 @@ export function PolygonEditor({
             </button>
             <button
               onClick={() => handleModeChange('delete-vertex')}
+              data-delete-shortcut
               className={`p-2 rounded transition-colors cursor-pointer ${
                 editMode === 'delete-vertex'
                   ? 'bg-accent-muted text-accent'
@@ -467,6 +471,7 @@ export function PolygonEditor({
           {activeId && (
             <button
               onClick={() => handleDeletePolygon(activeId)}
+              data-delete-shortcut
               className="ml-auto px-3 py-1.5 text-sm text-red-400 hover:bg-red-900/20 rounded border border-red-800 flex items-center gap-1 transition-colors cursor-pointer"
             >
               <Trash2 className="w-4 h-4" />

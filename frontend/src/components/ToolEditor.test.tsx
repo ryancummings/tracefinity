@@ -64,4 +64,25 @@ describe('ToolEditor outline view', () => {
 
     expect(onSmoothedChange).toHaveBeenCalledWith(false)
   })
+
+  it('uses Delete to remove a selected finger hole', () => {
+    const onFingerHolesChange = vi.fn()
+    const { container } = render(
+      <ToolEditor
+        points={points}
+        fingerHoles={[{ id: 'hole', x: 10, y: 10, radius: 2 }]}
+        smoothed={false} smoothLevel={0.5}
+        onPointsChange={vi.fn()} onFingerHolesChange={onFingerHolesChange}
+        onSmoothedChange={vi.fn()} onSmoothLevelChange={vi.fn()}
+      />
+    )
+    const hole = container.querySelector('circle.cursor-move[cx="80"][cy="80"][r="16"]')
+    expect(hole).not.toBeNull()
+    fireEvent.mouseDown(hole!)
+    fireEvent.mouseUp(window)
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeTruthy()
+
+    fireEvent.keyDown(window, { key: 'Delete' })
+    expect(onFingerHolesChange).toHaveBeenCalledWith([])
+  })
 })

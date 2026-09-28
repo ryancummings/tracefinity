@@ -4,7 +4,7 @@ import './globals.css'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { HelpCircle } from 'lucide-react'
 import { SettingsPopover } from '@/components/SettingsPopover'
 import { ThemeToggle } from '@/components/ThemeToggle'
@@ -13,6 +13,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { IconButton } from '@/components/IconButton'
 import { AccountMenu } from '@/components/AccountMenu'
 import { AuthGate } from '@/components/AuthGate'
+import { activateFocusedDeleteButton } from '@/hooks/useDeleteShortcut'
 
 export default function RootLayout({
   children,
@@ -22,6 +23,11 @@ export default function RootLayout({
   const [queryClient] = useState(() => new QueryClient())
   const [showHelp, setShowHelp] = useState(false)
   const pathname = usePathname()
+
+  useEffect(() => {
+    window.addEventListener('keydown', activateFocusedDeleteButton, true)
+    return () => window.removeEventListener('keydown', activateFocusedDeleteButton, true)
+  }, [])
 
   const isFullBleed = /^\/(trace|tools|bins|stations)\//.test(pathname)
 

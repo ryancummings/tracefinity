@@ -230,6 +230,7 @@ export function BinEditorToolbar({
           )}
           <button
             onClick={onRemoveTool}
+            data-delete-shortcut
             className={`${tbBtn} text-red-400 hover:bg-red-900/20`}
             aria-label="Remove"
           >
@@ -284,7 +285,7 @@ export function BinEditorToolbar({
               Recess
             </button>
           </div>
-          <button onClick={onRemoveLabel} className={`${tbBtn} text-red-400 hover:bg-red-900/20`}>
+          <button onClick={onRemoveLabel} data-delete-shortcut aria-label="Remove label" className={`${tbBtn} text-red-400 hover:bg-red-900/20`}>
             <Trash2 className="w-3 h-3" />
           </button>
         </>

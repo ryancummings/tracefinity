@@ -244,7 +244,7 @@ function NameModal({ open, title = 'New bin', description = 'Give your bin a nam
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
       <div className="relative glass rounded-[8px] shadow-xl max-w-sm w-full mx-4 p-6">
         <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
@@ -622,6 +622,8 @@ export default function HomePage() {
                       <div className="absolute right-2 top-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={(e) => { e.stopPropagation(); requestDelete({ type: 'project', id: project.id }) }}
+                          data-delete-shortcut
+                          aria-label={`Delete ${project.name}`}
                           className="btn-danger-icon"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -802,6 +804,8 @@ export default function HomePage() {
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); requestDelete({ type: 'tool', id: tool.id }) }}
+                            data-delete-shortcut
+                            aria-label={`Delete ${tool.name}`}
                             className="btn-danger-icon"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -858,6 +862,8 @@ export default function HomePage() {
                       <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={(e) => { e.stopPropagation(); requestDelete({ type: 'bin', id: bin.id }) }}
+                          data-delete-shortcut
+                          aria-label={`Delete ${bin.name || 'bin'}`}
                           className="btn-danger-icon"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -945,6 +951,7 @@ export default function HomePage() {
                         </button>
                         <button
                           onClick={() => requestDelete({ type: 'station', id: station.id })}
+                          data-delete-shortcut
                           className="btn-danger-icon"
                           title="Delete station"
                           aria-label={`Delete ${station.name}`}

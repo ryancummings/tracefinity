@@ -98,6 +98,7 @@ export function ToolEditorToolbar({
           </button>
           <button
             onClick={() => setEditMode('delete-vertex')}
+            data-delete-shortcut
             className={`px-2.5 py-1 rounded-[7px] text-[11px] font-medium flex items-center gap-1.5 transition-colors ${
               previewSmoothed || displayPointsCount <= 3 ? 'opacity-30 cursor-not-allowed text-text-muted' : editMode === 'delete-vertex' ? 'bg-accent-muted text-accent' : 'hover:bg-border/50 text-text-secondary'
             }`}
@@ -358,6 +359,7 @@ export function ToolEditorToolbar({
             <div className="h-4 w-px bg-border-subtle mx-0.5" />
             <button
               onClick={handleDeleteHole}
+              data-delete-shortcut
               className="px-2 py-1 text-[11px] font-medium text-white bg-red-700 hover:bg-red-600 rounded-[7px] flex items-center gap-1"
             >
               <Trash2 className="w-3 h-3" />

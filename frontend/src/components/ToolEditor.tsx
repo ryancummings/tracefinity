@@ -14,6 +14,7 @@ import {
 import { DISPLAY_SCALE, SNAP_GRID, ZOOM_FACTOR } from '@/lib/constants'
 import { cutoutShapeLabel, isRectangularCutout, resizeRectCutout, resizeRoundCutout } from '@/lib/cutouts'
 import { useHistory } from '@/hooks/useHistory'
+import { useDeleteShortcut } from '@/hooks/useDeleteShortcut'
 import { ToolEditorToolbar } from '@/components/ToolEditorToolbar'
 import { ToolEditorCanvas } from '@/components/ToolEditorCanvas'
 import type { EditMode, Selection } from '@/components/ToolEditorToolbar'
@@ -768,6 +769,8 @@ export function ToolEditor({ points, fingerHoles, interiorRings, smoothed, smoot
     onFingerHolesChange(updated)
     setSelection(null)
   }
+
+  useDeleteShortcut(handleDeleteHole, selection?.type === 'hole')
 
   const handleAxisMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation()

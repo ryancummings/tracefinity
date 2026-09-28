@@ -12,6 +12,7 @@ import { BIN_DRAG_MIME, DrawerSketchCanvas } from '@/components/DrawerSketchCanv
 import { DrawerSketch3D } from '@/components/DrawerSketch3D'
 import { useBinStlUrls } from '@/hooks/useBinStlUrls'
 import { useDebouncedSave } from '@/hooks/useDebouncedSave'
+import { isDeleteKey } from '@/hooks/useDeleteShortcut'
 import { GRID_UNIT } from '@/lib/constants'
 import {
   DEFAULT_DRAWER_GRID_X,
@@ -316,9 +317,11 @@ export default function ProjectSketchPage() {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (!selectedPlacementId) return
-      const target = e.target as HTMLElement | null
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+      const target = e.target instanceof Element ? e.target : document.activeElement
+      if (e.defaultPrevented || document.querySelector('[aria-modal="true"]')) return
+      if (target instanceof Element && target.closest('input, textarea, select, [contenteditable], [role="textbox"], button, a, [role="button"]')) return
       if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (e.key === 'Delete' && !isDeleteKey(e)) return
         e.preventDefault()
         handleRemove(selectedPlacementId)
       }
@@ -482,6 +485,7 @@ export default function ProjectSketchPage() {
                 <button
                   type="button"
                   onClick={() => { setPlacements([]); setSelectedPlacementId(null); setArrangeMisfits(null) }}
+                  data-delete-shortcut
                   disabled={placements.length === 0}
                   className="btn-secondary px-2 py-1 text-[11px]"
                   title="Remove all bins from the drawer"
@@ -560,6 +564,7 @@ export default function ProjectSketchPage() {
                               <button
                                 type="button"
                                 onClick={() => handleRemoveBin(bin.id)}
+                                data-delete-shortcut
                                 className="p-0.5 text-text-muted hover:text-accent rounded-[7px] transition-colors cursor-pointer"
                                 title="Remove all copies from the drawer"
                               >
@@ -696,6 +701,7 @@ export default function ProjectSketchPage() {
               <button
                 type="button"
                 onClick={() => handleRemove(selectedPlacement.id)}
+                data-delete-shortcut
                 className="btn-danger-icon"
                 title="Remove from drawer (Delete)"
               >

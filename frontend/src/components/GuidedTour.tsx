@@ -18,7 +18,7 @@ export function GuidedTour({ open, onClose }: Props) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div role="dialog" aria-modal="true" aria-label="How it works" className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-surface border border-border rounded-lg shadow-2xl max-w-lg w-full mx-4 p-5 max-h-[90dvh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">

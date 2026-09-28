@@ -6,6 +6,7 @@ import { snapToGrid as snapToGridUtil } from '@/lib/svg'
 import { GRID_UNIT, DISPLAY_SCALE, SNAP_GRID } from '@/lib/constants'
 import { BinEditorToolbar } from '@/components/BinEditorToolbar'
 import { BinEditorCanvas } from '@/components/BinEditorCanvas'
+import { useDeleteShortcut } from '@/hooks/useDeleteShortcut'
 
 interface Props {
   placedTools: PlacedTool[]
@@ -410,6 +411,14 @@ export function BinEditor({
     onTextLabelsChange(textLabels.filter(l => l.id !== selection.labelId))
     setSelection(null)
   }
+
+  useDeleteShortcut(
+    () => {
+      if (selection?.type === 'tool') handleDeleteTool()
+      if (selection?.type === 'label') handleDeleteLabel()
+    },
+    selection?.type === 'tool' || selection?.type === 'label',
+  )
 
   const commitPendingLabel = useCallback(() => {
     if (!pendingLabel || !pendingText.trim()) {
