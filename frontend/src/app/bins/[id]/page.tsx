@@ -425,7 +425,7 @@ export default function BinPage() {
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-3 space-y-3">
           <div className="glass rounded-[10px] px-3 py-3">
             <div className="mb-2">
-              <EditorNavigation href={projectSource.rootHref} label={projectSource.projectId ? 'Back to project' : 'Back to dashboard'} pending={pending} saving={saving} saved={saved} error={saveError} />
+              <EditorNavigation href={projectSource.rootHref} label={projectSource.projectId ? 'Back to project' : 'Back to dashboard'} compact pending={pending} saving={saving} saved={saved} error={saveError} />
             </div>
             <div className="flex items-center gap-2 mb-3">
               <Breadcrumb segments={[
