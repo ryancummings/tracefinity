@@ -18,11 +18,13 @@ describe('per-feature depth controls', () => {
     const depth = screen.getByLabelText('Tool pocket depth (mm)')
     expect(screen.getByRole('complementary', { name: 'Tool settings' })).toBeTruthy()
     expect(depth.getAttribute('value')).toBe('14')
+    expect(screen.getByText('Maximum for this bin: 14.25 mm')).toBeTruthy()
     fireEvent.change(depth, { target: { value: '7' } })
     fireEvent.blur(depth)
     expect(onDepthChange).toHaveBeenCalledWith(7)
     rerender(<BinToolInspector {...props} maxDepth={0.25} />)
     expect(depth.getAttribute('value')).toBe('0.25')
+    expect(screen.getByText('Maximum for this bin: 0.25 mm')).toBeTruthy()
   })
 
   it('shows the tool depth as a cutout’s inherited depth and permits an override', () => {

@@ -44,7 +44,7 @@ export default function SettingsPage() {
       </div>
       <section className="glass rounded-xl p-5">
         <h2 className="text-lg font-medium mb-1">Cutouts and labels</h2>
-        <p className="text-xs text-text-muted mb-5">Sizes are in millimetres. Finger scoops have a flat floor and a tapered opening.</p>
+        <p className="text-xs text-text-muted mb-5">Sizes are in millimetres. Finger scoops have straight sides and a bevel near the flat floor.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {shapes.map(({ key, label }) => (
             <div key={key} className="rounded-lg border border-border p-3">

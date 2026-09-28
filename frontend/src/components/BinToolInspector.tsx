@@ -30,6 +30,7 @@ export function BinToolInspector({ tool, binDepth, maxDepth, smoothed, smoothLev
           onChange={onDepthChange} className="w-16 rounded bg-elevated px-2 py-1 text-right text-xs text-text-primary border border-border-subtle" />
       </label>
       <p className="text-[11px] text-text-muted mt-1">The pocket under this tool. Bin default: {defaultDepth.toFixed(2)} mm.</p>
+      <p className="mt-1 text-xs font-semibold text-text-primary">Maximum for this bin: {maxDepth.toFixed(2)} mm</p>
       {tool.depth_override != null && <button className="mt-1 text-xs text-accent" onClick={() => onDepthChange(null)}>Use bin default</button>}
       {tool.depth_override != null && tool.depth_override > maxDepth && <p className="text-[11px] text-text-muted">Limited by bin depth to {effectiveDepth.toFixed(2)} mm.</p>}
       {onToggleSmoothed && (

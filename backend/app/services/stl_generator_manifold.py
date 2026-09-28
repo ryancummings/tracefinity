@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 from app.constants import GF_GRID
 
 # Bump when geometry changes so saved previews and exports regenerate.
-STL_GEOMETRY_VERSION = 4
+STL_GEOMETRY_VERSION = 5
 
 GF_HALF_GRID = GF_GRID / 2  # 21mm
 GF_HEIGHT_UNIT = 7.0
@@ -1004,20 +1004,20 @@ def _make_finger_holes(
                         .translate((fh_x, fh_y, wall_top_z - pocket_depth))
                     )
                 elif shape == 'scoop':
-                    # A broad lip admits a fingertip while the flat floor reaches
-                    # the requested depth even when the radius is small.
+                    # Keep the opening straight-sided; the bevel is at the
+                    # floor, leaving a smaller flat area at full depth.
                     r = fh.radius_mm
                     bevel = min(r * 0.3, pocket_depth * 0.45)
-                    core_r = r - bevel
-                    core = mf.Manifold.cylinder(
-                        pocket_depth - bevel + 0.01, core_r,
+                    floor_r = r - bevel
+                    wall = mf.Manifold.cylinder(
+                        pocket_depth - bevel + 0.01, r,
                         circular_segments=ROUND_SEGS,
+                    ).translate((fh_x, fh_y, wall_top_z - pocket_depth + bevel))
+                    floor_bevel = mf.Manifold.extrude(
+                        mf.CrossSection.circle(floor_r, circular_segments=ROUND_SEGS),
+                        bevel + 0.01, scale_top=(r / floor_r, r / floor_r),
                     ).translate((fh_x, fh_y, wall_top_z - pocket_depth))
-                    lip = mf.Manifold.extrude(
-                        mf.CrossSection.circle(core_r, circular_segments=ROUND_SEGS),
-                        bevel + 0.01, scale_top=(r / core_r, r / core_r),
-                    ).translate((fh_x, fh_y, wall_top_z - bevel))
-                    cutter = core + lip
+                    cutter = wall + floor_bevel
                 elif shape == 'square':
                     size = fh.radius_mm * 2
                     cut_z = wall_top_z - pocket_depth / 2
@@ -1082,9 +1082,7 @@ def _make_finger_hole_chamfers(
             if eff_chamfer <= 0:
                 continue
             try:
-                if shape == 'scoop':
-                    continue  # the scoop already has its own tapered lip
-                if shape == 'circle' or shape == 'cylinder':
+                if shape in ('circle', 'cylinder', 'scoop'):
                     r = fh.radius_mm
                     cs = mf.CrossSection.circle(r, circular_segments=ROUND_SEGS)
                     cs_outer = cs.offset(eff_chamfer, mf.JoinType.Round)

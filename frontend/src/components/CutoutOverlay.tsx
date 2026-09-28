@@ -1,6 +1,6 @@
 import type { FingerHole } from '@/types'
 import { DEFAULT_CUTOUT_DEPTH, DISPLAY_SCALE } from '@/lib/constants'
-import { filletedRectangleRadius, isFilletedRectangleCutout, isRectangularCutout, scoopCoreRadius } from '@/lib/cutouts'
+import { filletedRectangleRadius, isFilletedRectangleCutout, isRectangularCutout, scoopFloorRadius } from '@/lib/cutouts'
 
 interface Props {
   holes: FingerHole[]
@@ -55,7 +55,7 @@ export function CutoutOverlay({ holes, zoom = 1, interactive, selectedId, editMo
             )}
             {(shape === 'cylinder' || (shape === 'scoop' && defaultCutoutDepth !== undefined)) && (
               <circle
-                cx={x} cy={y} r={Math.max(0.5, shape === 'scoop' ? scoopCoreRadius(r, cutoutDepth) : r * 0.35)}
+                cx={x} cy={y} r={Math.max(0.5, shape === 'scoop' ? scoopFloorRadius(r, cutoutDepth) : r * 0.35)}
                 fill="none" stroke={stroke} strokeWidth={strokeWidth}
                 className="pointer-events-none"
               />
