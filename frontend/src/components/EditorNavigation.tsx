@@ -32,7 +32,7 @@ export function EditorNavigation({ href, label, compact = false, pending, saving
         <span className="truncate">{label}</span>
       </Link>
       {status && (
-        <span role="status" aria-live="polite" className={`inline-flex items-center gap-1 text-[11px] text-text-secondary flex-shrink-0 ${compact ? 'self-end' : ''}`}>
+        <span role="status" aria-live="polite" className={`inline-flex items-center gap-1 text-[11px] text-text-secondary flex-shrink-0 ${compact ? 'self-start pl-2' : ''}`}>
           {error && !pending && !saving ? <TriangleAlert className="w-3.5 h-3.5 text-red-400" />
             : pending || saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : <Check className="w-3.5 h-3.5 text-green-400" />}
