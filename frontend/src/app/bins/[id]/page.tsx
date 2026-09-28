@@ -122,28 +122,11 @@ export default function BinPage() {
         const [data, tools] = await Promise.all([getBin(binId), listTools()])
         setBinData(data)
 
-        const toolMap = new Map(tools.map(t => [t.id, t]))
-        const synced = data.placed_tools.map(pt => {
-          const lib = toolMap.get(pt.tool_id)
-          if (!lib) return pt
-          const rad = (pt.rotation || 0) * Math.PI / 180
-          const cos = Math.cos(rad)
-          const sin = Math.sin(rad)
-          const n = pt.points.length || 1
-          const cx = pt.points.reduce((s, p) => s + p.x, 0) / n
-          const cy = pt.points.reduce((s, p) => s + p.y, 0) / n
-          const newRings = (lib.interior_rings ?? []).map(ring =>
-            ring.map(p => ({
-              x: p.x * cos - p.y * sin + cx,
-              y: p.x * sin + p.y * cos + cy,
-            }))
-          )
-          return { ...pt, interior_rings: newRings }
-        })
-        setPlacedTools(synced)
+        setPlacedTools(data.placed_tools)
         setTextLabels(data.text_labels)
         setName(data.name || '')
         setConfig(buildBinConfig(data.bin_config));
+        setAutoSize(data.auto_size_grid ?? false)
         setSmoothedToolIds(new Set(tools.filter(t => t.smoothed).map(t => t.id)))
         setSmoothLevels(new Map(tools.map(t => [t.id, t.smooth_level])))
       } catch {
@@ -228,13 +211,14 @@ export default function BinPage() {
       await updateBin(binId, {
         name: name || undefined,
         bin_config: config,
+        auto_size_grid: autoSize,
         placed_tools: placedTools,
         text_labels: textLabels,
       })
     },
-    [binData, binId, name, config, placedTools, textLabels],
+    [binData, binId, name, config, autoSize, placedTools, textLabels],
     150,
-    { skipInitial: true }
+    { skipInitial: true, enabled: binData !== null }
   )
 
   useEffect(() => {
@@ -329,7 +313,7 @@ export default function BinPage() {
     const needY = Math.max(config.grid_y, requiredGridUnits(toolH, margin, config.half_grid_base));
     const candidateIsValid = getGridSizeError(needX, needY) === null
 
-    if (candidateIsValid && (needX !== config.grid_x || needY !== config.grid_y)) {
+    if (autoSize && candidateIsValid && (needX !== config.grid_x || needY !== config.grid_y)) {
         setConfig((prev) => ({
             ...prev,
             grid_x: needX,
@@ -339,8 +323,8 @@ export default function BinPage() {
     }
 
     // always centre the tool in the bin
-    const binW = (candidateIsValid ? needX : config.grid_x) * GRID_UNIT
-    const binH = (candidateIsValid ? needY : config.grid_y) * GRID_UNIT
+    const binW = (autoSize && candidateIsValid ? needX : config.grid_x) * GRID_UNIT
+    const binH = (autoSize && candidateIsValid ? needY : config.grid_y) * GRID_UNIT
     const toolCx = (minX + maxX) / 2
     const toolCy = (minY + maxY) / 2
     const dx = binW / 2 - toolCx
@@ -355,7 +339,7 @@ export default function BinPage() {
     }
 
     setPlacedTools(prev => [...prev, placed])
-  }, [config.grid_x, config.grid_y, config.wall_thickness, config.cutout_clearance, config.half_grid_base])
+  }, [autoSize, config.grid_x, config.grid_y, config.wall_thickness, config.cutout_clearance, config.half_grid_base])
 
   // the retention sweep purges exports, so a stale tab's file may be gone;
   // downloadExport regenerates from saved state and retries before failing

@@ -42,7 +42,7 @@ Labels can be dragged to reposition and have a rotation handle.
 
 ## Auto-size grid
 
-Enabled by default. The grid automatically expands or contracts to fit all placed tools with clearance. Tools are recentred when the grid changes. Turn it off in the sidebar to set grid dimensions manually.
+Enabled by default for new bins. The grid automatically expands or contracts to fit all placed tools with clearance. Tools are recentred when the grid changes. Turn it off in the sidebar to set grid dimensions manually. The selected mode and dimensions are saved with the bin and restored when you reopen it. Existing bins saved before this setting was persistent open in manual mode to preserve their dimensions.
 
 ## Recentre
 
