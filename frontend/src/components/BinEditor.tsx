@@ -9,6 +9,7 @@ import { BinEditorCanvas } from '@/components/BinEditorCanvas'
 import { useDeleteShortcut } from '@/hooks/useDeleteShortcut'
 import { getCutoutDefaults, getSettings } from '@/lib/settings'
 import { BinCutoutInspector } from '@/components/BinCutoutInspector'
+import { BinToolInspector } from '@/components/BinToolInspector'
 import { cutoutShapeLabel, resizeRoundCutout } from '@/lib/cutouts'
 
 interface Props {
@@ -622,19 +623,9 @@ export function BinEditor({
           snapGrid={snapGrid}
           setSnapGrid={setSnapGrid}
           handleRecenter={handleRecenter}
-          selectedTool={selectedTool ?? null}
           selectedLabel={selectedLabel ?? null}
-          onEditTool={onEditTool}
-          onRemoveTool={handleDeleteTool}
           onRemoveLabel={handleDeleteLabel}
-          smoothedToolIds={smoothedToolIds}
-          smoothLevels={smoothLevels}
-          onToggleSmoothed={onToggleSmoothed}
-          onSmoothLevelChange={onSmoothLevelChange}
           onUpdateLabel={updateSelectedLabel}
-          defaultCutoutDepth={defaultCutoutDepth}
-          maxCutoutDepth={maxCutoutDepth}
-          onSetCutoutDepthOverride={setCutoutDepthOverride}
           cutoutShape={cutoutShape}
           onCutoutShapeChange={setCutoutShape}
         />
@@ -648,6 +639,14 @@ export function BinEditor({
         <BinCutoutInspector
           hole={selectedHole} tool={selectedHoleTool} binDepth={defaultCutoutDepth} maxDepth={maxCutoutDepth}
           onUpdate={updateSelectedHole} onDepthChange={d => setHoleDepthOverride(selectedHoleTool.id, selectedHole.id, d)} onRemove={removeSelectedHole}
+        />
+      )}
+      {selectedTool && activeTool === 'select' && (
+        <BinToolInspector
+          key={selectedTool.id} tool={selectedTool} binDepth={defaultCutoutDepth} maxDepth={maxCutoutDepth}
+          smoothed={smoothedToolIds?.has(selectedTool.tool_id) ?? false} smoothLevel={smoothLevels?.get(selectedTool.tool_id) ?? 0.5}
+          onToggleSmoothed={onToggleSmoothed} onSmoothLevelChange={onSmoothLevelChange}
+          onDepthChange={d => setCutoutDepthOverride(selectedTool.id, d)} onEdit={onEditTool} onRemove={handleDeleteTool}
         />
       )}
       <BinEditorCanvas

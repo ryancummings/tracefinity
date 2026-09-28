@@ -40,6 +40,22 @@ describe('BinEditor snap to grid', () => {
 describe('bin cutouts', () => {
   afterEach(cleanup)
 
+  it('opens visible tool settings when an outline is selected', () => {
+    const tool = {
+      id: 'placed', tool_id: 'source', name: 'Wrench', rotation: 0,
+      points: [{ x: 15, y: 15 }, { x: 35, y: 15 }, { x: 35, y: 35 }, { x: 15, y: 35 }],
+      finger_holes: [], interior_rings: [],
+    }
+    render(<BinEditor {...baseProps} placedTools={[tool]} />)
+    const canvas = screen.getByTestId('bin-canvas')
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 742, height: 702 } as DOMRect)
+    fireEvent.mouseDown(canvas.querySelector('path')!, { clientX: 210, clientY: 210 })
+    fireEvent.mouseUp(window)
+    fireEvent.click(canvas.querySelector('path')!, { clientX: 210, clientY: 210 })
+    expect(screen.getByRole('complementary', { name: 'Tool settings' })).toBeTruthy()
+    expect(screen.getByLabelText('Tool pocket depth (mm)').getAttribute('value')).toBe('10')
+  })
+
   it('chooses an owner explicitly, then places a saved-size scoop beside its outline', () => {
     localStorage.setItem('tracefinity-settings', JSON.stringify({ cutoutDefaults: { scoop: { radius: 7 } } }))
     const onPlacedToolsChange = vi.fn()

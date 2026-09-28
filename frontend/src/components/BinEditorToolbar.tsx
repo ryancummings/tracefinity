@@ -1,76 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { MousePointer2, Trash2, Magnet, Type, Pencil, Maximize2 } from 'lucide-react'
-import type { CutoutShape, PlacedTool, TextLabel } from '@/types'
+import { MousePointer2, Trash2, Magnet, Type, Maximize2 } from 'lucide-react'
+import type { CutoutShape, TextLabel } from '@/types'
 import { SNAP_GRID_MIN, SNAP_GRID_MAX } from '@/lib/constants'
 import { NumericInput } from '@/components/NumericInput'
-
-interface DepthInputProps {
-  value: number | null | undefined
-  defaultDepth: number
-  maxDepth: number
-  onCommit: (depth: number | null) => void
-  resetKey: string
-}
-
-function DepthInput({ value, defaultDepth, maxDepth, onCommit, resetKey }: DepthInputProps) {
-  const [text, setText] = useState<string>(value == null ? '' : String(Math.min(maxDepth, Math.max(5, value))))
-
-  // sync local text when the selected item changes (resetKey switches)
-  useEffect(() => {
-    setText(value == null ? '' : String(Math.min(maxDepth, Math.max(5, value))))
-  }, [resetKey, value, maxDepth])
-
-  const commit = (raw: string) => {
-    const trimmed = raw.trim()
-    if (trimmed === '') {
-      onCommit(null)
-      return
-    }
-    const n = parseFloat(trimmed)
-    if (Number.isNaN(n)) {
-      // revert local text to last committed value
-      setText(value == null ? '' : String(Math.min(maxDepth, Math.max(5, value))))
-      return
-    }
-    const clamped = Math.min(maxDepth, Math.max(5, n))
-    setText(String(clamped))
-    onCommit(clamped)
-  }
-
-  return (
-    <>
-      <input
-        type="number"
-        value={text}
-        placeholder={Math.min(maxDepth, Math.max(5, defaultDepth)).toFixed(2)}
-        min={Math.min(5, maxDepth)}
-        max={maxDepth}
-        step={0.25}
-        onChange={e => setText(e.target.value)}
-        onBlur={e => commit(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur()
-          if (e.key === 'Escape') {
-            setText(value == null ? '' : String(Math.min(maxDepth, Math.max(5, value))))
-            ;(e.currentTarget as HTMLInputElement).blur()
-          }
-        }}
-        className="w-12 px-1 py-1 bg-elevated border border-border-subtle rounded-[6px] text-text-primary text-[10px] text-center outline-none focus:border-accent"
-      />
-      {value != null && (
-        <button
-          onClick={() => { setText(''); onCommit(null) }}
-          className="text-[10px] text-text-muted hover:text-text-secondary px-1"
-          title="Reset to default"
-        >
-          ×
-        </button>
-      )}
-    </>
-  )
-}
 
 type Tool = 'select' | 'text' | 'choose-cutout-tool' | 'cutout'
 
@@ -83,19 +16,9 @@ interface Props {
   snapGrid: number
   setSnapGrid: (grid: number) => void
   handleRecenter: () => void
-  selectedTool: PlacedTool | null
   selectedLabel: TextLabel | null
-  onEditTool?: (toolId: string) => void
-  onRemoveTool: () => void
   onRemoveLabel: () => void
-  smoothedToolIds?: Set<string>
-  smoothLevels?: Map<string, number>
-  onToggleSmoothed?: (toolId: string, smoothed: boolean) => void
-  onSmoothLevelChange?: (toolId: string, level: number) => void
   onUpdateLabel: (updates: Partial<TextLabel>) => void
-  defaultCutoutDepth: number
-  maxCutoutDepth: number
-  onSetCutoutDepthOverride: (toolId: string, depth: number | null) => void
   cutoutShape: CutoutShape
   onCutoutShapeChange: (shape: CutoutShape) => void
 }
@@ -113,19 +36,9 @@ export function BinEditorToolbar({
   snapGrid,
   setSnapGrid,
   handleRecenter,
-  selectedTool,
   selectedLabel,
-  onEditTool,
-  onRemoveTool,
   onRemoveLabel,
-  smoothedToolIds,
-  smoothLevels,
-  onToggleSmoothed,
-  onSmoothLevelChange,
   onUpdateLabel,
-  defaultCutoutDepth,
-  maxCutoutDepth,
-  onSetCutoutDepthOverride,
   cutoutShape,
   onCutoutShapeChange,
 }: Props) {
@@ -183,66 +96,6 @@ export function BinEditorToolbar({
         <Maximize2 className="w-3.5 h-3.5" />
         Recenter
       </button>
-
-      {selectedTool && (
-        <>
-          <div className="w-px h-4 bg-glass-border mx-1 flex-shrink-0" />
-          {onToggleSmoothed && (
-            <div className="flex items-center rounded-[6px] overflow-hidden border border-glass-border">
-              <button
-                onClick={() => onToggleSmoothed(selectedTool.tool_id, false)}
-                className={`px-2 py-1 text-[10px] font-medium transition-colors cursor-pointer ${!smoothedToolIds?.has(selectedTool.tool_id) ? 'bg-accent text-white' : 'text-text-muted hover:text-text-secondary'}`}
-              >
-                Accurate
-              </button>
-              <button
-                onClick={() => onToggleSmoothed(selectedTool.tool_id, true)}
-                className={`px-2 py-1 text-[10px] font-medium transition-colors cursor-pointer ${smoothedToolIds?.has(selectedTool.tool_id) ? 'bg-accent text-white' : 'text-text-muted hover:text-text-secondary'}`}
-              >
-                Smooth
-              </button>
-            </div>
-          )}
-          {smoothedToolIds?.has(selectedTool.tool_id) && onSmoothLevelChange && (
-            <input
-              type="range" min={0} max={1} step={0.05}
-              value={smoothLevels?.get(selectedTool.tool_id) ?? 0.5}
-              onChange={e => onSmoothLevelChange(selectedTool.tool_id, parseFloat(e.target.value))}
-              className="w-16 h-1 accent-accent"
-            />
-          )}
-          <div
-            className="flex items-center gap-1 text-[10px] text-text-muted"
-            title={`Cutout depth (mm). Default: ${Math.min(maxCutoutDepth, Math.max(5, defaultCutoutDepth)).toFixed(2)}mm. Max: ${maxCutoutDepth.toFixed(2)}mm.`}
-          >
-            <span>Depth</span>
-            <DepthInput
-              value={selectedTool.depth_override}
-              defaultDepth={defaultCutoutDepth}
-              maxDepth={maxCutoutDepth}
-              onCommit={(d) => onSetCutoutDepthOverride(selectedTool.id, d)}
-              resetKey={`tool:${selectedTool.id}`}
-            />
-          </div>
-          {onEditTool && (
-            <button
-              onClick={() => onEditTool(selectedTool.tool_id)}
-              className={`${tbBtn} text-accent`}
-            >
-              <Pencil className="w-3 h-3" />
-              Edit
-            </button>
-          )}
-          <button
-            onClick={onRemoveTool}
-            data-delete-shortcut
-            className={`${tbBtn} text-red-400 hover:bg-red-900/20`}
-            aria-label="Remove"
-          >
-            <Trash2 className="w-3 h-3" />
-          </button>
-        </>
-      )}
 
       {selectedLabel && (
         <>

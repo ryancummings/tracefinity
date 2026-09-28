@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { BinEditorToolbar } from './BinEditorToolbar'
 import { BinCutoutInspector } from './BinCutoutInspector'
+import { BinToolInspector } from './BinToolInspector'
 
 afterEach(cleanup)
 
@@ -10,28 +10,19 @@ const selectedTool = {
   id: 'placed', tool_id: 'square', name: 'Square', points: [],
   finger_holes: [], interior_rings: [], rotation: 0, depth_override: 14,
 }
-const props = {
-  activeTool: 'select' as const, setActiveTool: vi.fn(), snapEnabled: false,
-  onStartCutout: vi.fn(),
-  setSnapEnabled: vi.fn(), snapGrid: 1, setSnapGrid: vi.fn(), handleRecenter: vi.fn(),
-  selectedTool, selectedLabel: null,
-  onRemoveTool: vi.fn(), onRemoveLabel: vi.fn(), onUpdateLabel: vi.fn(),
-  defaultCutoutDepth: 20, maxCutoutDepth: 14.25,
-  onSetCutoutDepthOverride: vi.fn(),
-  cutoutShape: 'scoop' as const, onCutoutShapeChange: vi.fn(),
-}
-
 describe('per-feature depth controls', () => {
-  it('updates an existing override when the bin gets shallower', () => {
-    const onSetCutoutDepthOverride = vi.fn()
-    const { rerender } = render(<BinEditorToolbar {...props} onSetCutoutDepthOverride={onSetCutoutDepthOverride} />)
-    const depth = screen.getByPlaceholderText('14.25')
+  it('shows tool pocket depth in a bounded inspector and updates an override when the bin gets shallower', () => {
+    const onDepthChange = vi.fn()
+    const props = { tool: selectedTool, binDepth: 20, maxDepth: 14.25, smoothed: false, smoothLevel: 0.5, onDepthChange, onRemove: vi.fn() }
+    const { rerender } = render(<BinToolInspector {...props} />)
+    const depth = screen.getByLabelText('Tool pocket depth (mm)')
+    expect(screen.getByRole('complementary', { name: 'Tool settings' })).toBeTruthy()
     expect(depth.getAttribute('value')).toBe('14')
-    rerender(<BinEditorToolbar {...props} maxCutoutDepth={0.25} onSetCutoutDepthOverride={onSetCutoutDepthOverride} />)
-    expect(depth.getAttribute('value')).toBe('0.25')
     fireEvent.change(depth, { target: { value: '7' } })
     fireEvent.blur(depth)
-    expect(onSetCutoutDepthOverride).toHaveBeenCalledWith('placed', 0.25)
+    expect(onDepthChange).toHaveBeenCalledWith(7)
+    rerender(<BinToolInspector {...props} maxDepth={0.25} />)
+    expect(depth.getAttribute('value')).toBe('0.25')
   })
 
   it('shows the tool depth as a cutout’s inherited depth and permits an override', () => {
