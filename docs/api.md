@@ -80,6 +80,7 @@ Trace and mask-trace responses include the final visible `Polygon.label` values 
 - `GET /api/bins/{id}` - get bin (syncs placed tools with library versions)
 - `POST /api/bins` - create bin (optionally with tool_ids for auto-sizing and bin_config defaults)
 - `PUT /api/bins/{id}` - update bin
+- Bin detail includes `auto_size_grid`. New bins start with `true`; older records without a saved mode return `null` and open in manual mode to preserve their stored dimensions. Send the chosen mode in `PUT /api/bins/{id}` to retain it across visits; `bin_config.grid_x` and `grid_y` hold the dimensions.
 - `DELETE /api/bins/{id}` - delete bin + output files
 - `POST /api/bins/{id}/generate` - generate STL/3MF from bin
 

@@ -11,6 +11,53 @@ describe('useDebouncedSave', () => {
     expect(result.current.saveCount).toBe(0)
   })
 
+  it('saves an edit immediately after hydration without saving the loaded state', async () => {
+    vi.useFakeTimers()
+    let ready = false
+    let value = 0
+    const savedValues: number[] = []
+    const saveFn = vi.fn(async () => { savedValues.push(value) })
+    const { rerender } = renderHook(() =>
+      useDebouncedSave(saveFn, [value], 50, { skipInitial: true, enabled: ready }),
+    )
+
+    ready = true
+    value = 5
+    rerender()
+    await act(async () => { vi.advanceTimersByTime(25) })
+    expect(saveFn).not.toHaveBeenCalled()
+
+    value = 6
+    rerender()
+    await act(async () => { vi.advanceTimersByTime(50) })
+    expect(saveFn).toHaveBeenCalledTimes(1)
+    expect(savedValues).toEqual([6])
+    vi.useRealTimers()
+  })
+
+  it('flushes a pending edit when in-app navigation unmounts the editor', async () => {
+    vi.useFakeTimers()
+    let ready = false
+    let value = 0
+    const savedValues: number[] = []
+    const saveFn = vi.fn(async () => { savedValues.push(value) })
+    const { rerender, unmount } = renderHook(() =>
+      useDebouncedSave(saveFn, [value], 150, { skipInitial: true, enabled: ready }),
+    )
+
+    ready = true
+    value = 4
+    rerender()
+    value = 5
+    rerender()
+    await act(async () => { unmount() })
+
+    expect(savedValues).toEqual([5])
+    await act(async () => { vi.advanceTimersByTime(150) })
+    expect(saveFn).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
   it('saveCount increments after a successful save', async () => {
     vi.useFakeTimers()
     const saveFn = vi.fn().mockResolvedValue(undefined)

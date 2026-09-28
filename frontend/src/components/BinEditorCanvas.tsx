@@ -24,6 +24,7 @@ interface Props {
   partialBinsValues: boolean[]
   wallThickness: number
   placedTools: PlacedTool[]
+  oversizedToolIds?: Set<string>
   selection: Selection
   textLabels: TextLabel[]
   editingLabelId: string | null
@@ -72,6 +73,7 @@ export function BinEditorCanvas({
   partialBinsValues,
   wallThickness,
   placedTools,
+  oversizedToolIds,
   selection,
   textLabels,
   editingLabelId,
@@ -198,15 +200,19 @@ export function BinEditorCanvas({
               pathData = polygonPathData(tool.points, tool.interior_rings, DISPLAY_SCALE)
             }
             const isSelected = selection?.type === 'tool' && selection.toolId === tool.id
+            const isOversized = oversizedToolIds?.has(tool.id) ?? false
 
             return (
               <g key={tool.id} onClick={stopClickUnlessText}>
+                {isOversized && <title>{tool.name} may be clipped outside the printable area</title>}
                 <path
                   d={pathData}
                   fillRule="evenodd"
                   fill={isSelected ? 'rgb(51, 65, 85)' : 'rgb(71, 85, 105)'}
-                  stroke={isSelected ? 'rgb(148, 163, 184)' : 'rgb(100, 116, 139)'}
+                  stroke={isOversized ? 'rgb(251, 191, 36)' : isSelected ? 'rgb(148, 163, 184)' : 'rgb(100, 116, 139)'}
                   strokeWidth={handleStroke}
+                  strokeDasharray={isOversized ? '8,5' : undefined}
+                  aria-label={isOversized ? `${tool.name} may be clipped outside the printable area` : undefined}
                   className={activeTool === 'text' ? 'cursor-crosshair' : 'cursor-move'}
                   onMouseDown={handleToolMouseDown(tool.id)}
                   onClick={stopClickUnlessText}

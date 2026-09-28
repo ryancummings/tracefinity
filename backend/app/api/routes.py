@@ -615,6 +615,7 @@ def _build_bin_from_tools(
         name=name,
         project_id=project_id,
         bin_config=bc,
+        auto_size_grid=True,
         placed_tools=placed,
         created_at=_now_iso(),
     )
@@ -2145,6 +2146,8 @@ async def update_bin(request: Request, bin_id: str, req: BinUpdateRequest, user_
         bin_data.project_id = req.project_id
     if req.bin_config is not None:
         bin_data.bin_config = req.bin_config
+    if req.auto_size_grid is not None:
+        bin_data.auto_size_grid = req.auto_size_grid
     if req.placed_tools is not None:
         bin_data.placed_tools = req.placed_tools
     if req.text_labels is not None:

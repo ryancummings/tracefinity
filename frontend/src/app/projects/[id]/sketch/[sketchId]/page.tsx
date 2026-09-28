@@ -160,7 +160,7 @@ export default function ProjectSketchPage() {
     },
     [project, sketch, drawerX, drawerY, placements],
     400,
-    { skipInitial: true },
+    { skipInitial: true, enabled: project !== null && sketch !== null },
   )
 
   const flushRef = useRef(flush)

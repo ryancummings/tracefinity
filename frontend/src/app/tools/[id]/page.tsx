@@ -76,7 +76,7 @@ export default function ToolPage() {
     },
     [tool, name, toolId],
     150,
-    { skipInitial: true }
+    { skipInitial: true, enabled: tool !== null }
   )
 
   const handlePointsChange = useCallback((points: Point[]) => {

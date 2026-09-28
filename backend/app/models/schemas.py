@@ -729,6 +729,7 @@ class BinModel(BaseModel):
     name: str | None = None
     project_id: str | None = None
     bin_config: BinConfig = BinConfig()
+    auto_size_grid: bool | None = None  # legacy bins lack a saved mode
     placed_tools: list[PlacedTool] = []
     text_labels: list[TextLabel] = []
     stl_path: str | None = None
@@ -762,6 +763,7 @@ class BinUpdateRequest(BaseModel):
     name: str | None = None
     project_id: str | None = None
     bin_config: BinConfig | None = None
+    auto_size_grid: bool | None = None
     placed_tools: list[PlacedTool] | None = None
     text_labels: list[TextLabel] | None = None
 

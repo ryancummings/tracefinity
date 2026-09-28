@@ -4,7 +4,7 @@ export function useDebouncedSave(
   saveFn: () => Promise<void> | void,
   deps: unknown[],
   delay: number = 150,
-  options?: { skipInitial?: boolean }
+  options?: { skipInitial?: boolean; enabled?: boolean }
 ): { saving: boolean; saved: boolean; saveCount: number; error: Error | null; flush: () => Promise<void> } {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -13,21 +13,16 @@ export function useDebouncedSave(
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const pendingSaveRef = useRef<(() => Promise<void> | void) | null>(null)
   const savedTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const armedRef = useRef(!options?.skipInitial)
+  const initialSkippedRef = useRef(!options?.skipInitial)
   const saveFnRef = useRef(saveFn)
   saveFnRef.current = saveFn
 
-  // arm after initial render cycle
   useEffect(() => {
-    if (options?.skipInitial) {
-      const t = setTimeout(() => { armedRef.current = true }, 100)
-      return () => clearTimeout(t)
+    if (options?.enabled === false) return
+    if (!initialSkippedRef.current) {
+      initialSkippedRef.current = true
+      return
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    if (!armedRef.current) return
     const doSave = async () => {
       setSaving(true)
       setSaved(false)
@@ -55,7 +50,7 @@ export function useDebouncedSave(
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
+  }, [...deps, options?.enabled])
 
   /** Run a save that is still waiting out the debounce, e.g. before navigating away. */
   const flush = useCallback(async () => {
@@ -68,12 +63,15 @@ export function useDebouncedSave(
     if (pending) await pending()
   }, [])
 
-  // flush pending save on page unload
+  // In-app navigation unmounts the editor without firing beforeunload.
   useEffect(() => {
-    const onUnload = () => { pendingSaveRef.current?.() }
+    const onUnload = () => { void flush() }
     window.addEventListener('beforeunload', onUnload)
-    return () => window.removeEventListener('beforeunload', onUnload)
-  }, [])
+    return () => {
+      window.removeEventListener('beforeunload', onUnload)
+      void flush()
+    }
+  }, [flush])
 
   return { saving, saved, saveCount, error, flush }
 }

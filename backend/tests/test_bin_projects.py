@@ -167,6 +167,37 @@ def _seed_tool(tool_id: str):
     tool_store.set(tool_id, _tool(tool_id))
 
 
+def test_manual_grid_mode_survives_bin_reload(tmp_path, monkeypatch):
+    client = _api_client(tmp_path, monkeypatch)
+    created = client.post("/api/bins", json={"name": "Scissors tray"})
+    assert created.status_code == 200
+    bin_id = created.json()["id"]
+    assert created.json()["auto_size_grid"] is True
+
+    updated = client.put(
+        f"/api/bins/{bin_id}",
+        json={"bin_config": {"grid_x": 4, "grid_y": 3}, "auto_size_grid": False},
+    )
+    assert updated.status_code == 200
+
+    reloaded = client.get(f"/api/bins/{bin_id}")
+    assert reloaded.status_code == 200
+    assert reloaded.json()["auto_size_grid"] is False
+    assert reloaded.json()["bin_config"]["grid_x"] == 4
+    assert reloaded.json()["bin_config"]["grid_y"] == 3
+
+
+def test_legacy_bin_has_no_auto_size_mode():
+    legacy = BinModel.model_validate({
+        "id": "old-bin",
+        "bin_config": {"grid_x": 4, "grid_y": 3},
+    })
+
+    assert legacy.auto_size_grid is None
+    assert legacy.bin_config.grid_x == 4
+    assert legacy.bin_config.grid_y == 3
+
+
 def test_project_create_bin_derives_placed_status_without_persisting_state(tmp_path, monkeypatch):
     client = _api_client(tmp_path, monkeypatch)
     _seed_tool("tool-1")
