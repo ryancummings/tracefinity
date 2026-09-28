@@ -10,8 +10,9 @@ import { getBin, updateBin, generateBinStl, getBinStlUrl, getBinZipUrl, getBinTh
 import { buildBinConfig, createPartialBinsValues, getDefaultBinConfig, resetDefaultBinConfig, saveDefaultBinConfig } from '@/lib/binDefaults'
 import { downloadExport } from '@/lib/download'
 import type { BinConfig, BinData, PlacedTool, TextLabel } from '@/types'
-import { Download, Loader2, Package, ChevronDown, Check, TriangleAlert } from 'lucide-react'
+import { Download, Loader2, Package, ChevronDown, TriangleAlert } from 'lucide-react'
 import { Breadcrumb } from '@/components/Breadcrumb'
+import { EditorNavigation } from '@/components/EditorNavigation'
 import { Alert } from '@/components/Alert'
 import { useDebouncedSave } from '@/hooks/useDebouncedSave'
 import { useProjectSource } from '@/hooks/useProjectSource'
@@ -207,7 +208,7 @@ export default function BinPage() {
     setInsertStlUrl(null)
   }, [gridLimitError])
 
-  const { saving, saved, error: saveError } = useDebouncedSave(
+  const { pending, saving, saved, error: saveError } = useDebouncedSave(
     async () => {
       if (!binData) return
       await updateBin(binId, {
@@ -423,19 +424,14 @@ export default function BinPage() {
       <div className="w-[200px] flex-shrink-0 bg-surface border-r border-border flex flex-col">
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-3 space-y-3">
           <div className="glass rounded-[10px] px-3 py-3">
+            <div className="mb-2">
+              <EditorNavigation href={projectSource.rootHref} label={projectSource.projectId ? 'Back to project' : 'Back to dashboard'} pending={pending} saving={saving} saved={saved} error={saveError} />
+            </div>
             <div className="flex items-center gap-2 mb-3">
               <Breadcrumb segments={[
                 { label: projectSource.rootLabel, href: projectSource.rootHref },
                 { label: name || 'Untitled', editable: true, onEdit: (v) => setName(v) },
               ]} />
-              {saving && <Loader2 className="w-3 h-3 animate-spin text-text-muted flex-shrink-0" />}
-              {saved && !saveError && <Check className="w-3 h-3 text-green-400 flex-shrink-0" />}
-              {saveError && !saving && (
-                <TriangleAlert
-                  className="w-3 h-3 text-red-400 flex-shrink-0"
-                  aria-label="Changes not saved"
-                />
-              )}
             </div>
             {saveError && (
               <div role="alert" className="mb-3 rounded-[8px] border border-red-800 bg-red-900/20 px-2 py-1.5 text-[11px] text-red-300">

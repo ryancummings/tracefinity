@@ -5,14 +5,16 @@ export function useDebouncedSave(
   deps: unknown[],
   delay: number = 150,
   options?: { skipInitial?: boolean; enabled?: boolean }
-): { saving: boolean; saved: boolean; saveCount: number; error: Error | null; flush: () => Promise<void> } {
+): { pending: boolean; saving: boolean; saved: boolean; saveCount: number; error: Error | null; flush: () => Promise<void> } {
+  const [pending, setPending] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveCount, setSaveCount] = useState(0)
   const [error, setError] = useState<Error | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const pendingSaveRef = useRef<(() => Promise<void> | void) | null>(null)
-  const savedTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const revisionRef = useRef(0)
+  const inFlightRef = useRef<Promise<void>>(Promise.resolve())
   const initialSkippedRef = useRef(!options?.skipInitial)
   const saveFnRef = useRef(saveFn)
   saveFnRef.current = saveFn
@@ -21,24 +23,36 @@ export function useDebouncedSave(
     if (options?.enabled === false) return
     if (!initialSkippedRef.current) {
       initialSkippedRef.current = true
+      setSaved(true)
       return
     }
+    const revision = ++revisionRef.current
+    setSaved(false)
+    setPending(true)
     const doSave = async () => {
-      setSaving(true)
-      setSaved(false)
-      try {
-        await saveFnRef.current()
-        setSaveCount(c => c + 1)
-        setSaved(true)
-        setError(null)
-        if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-        savedTimerRef.current = setTimeout(() => setSaved(false), 2000)
-      } catch (err) {
-        // surfaced to the caller: a silent failure looks identical to a save
-        setError(err instanceof Error ? err : new Error('save failed'))
-      } finally {
-        setSaving(false)
+      const save = saveFnRef.current
+      if (revision === revisionRef.current) setPending(false)
+      const run = async () => {
+        if (revision === revisionRef.current) setSaving(true)
+        try {
+          await save()
+          setSaveCount(c => c + 1)
+          if (revision === revisionRef.current) {
+            setSaved(true)
+            setError(null)
+          }
+        } catch (err) {
+          // A failed request must never be reported as saved.
+          if (revision === revisionRef.current) {
+            setError(err instanceof Error ? err : new Error('save failed'))
+          }
+        } finally {
+          if (revision === revisionRef.current) setSaving(false)
+        }
       }
+      const next = inFlightRef.current.then(run)
+      inFlightRef.current = next
+      await next
     }
     pendingSaveRef.current = doSave
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
@@ -61,6 +75,7 @@ export function useDebouncedSave(
     const pending = pendingSaveRef.current
     pendingSaveRef.current = null
     if (pending) await pending()
+    await inFlightRef.current
   }, [])
 
   // In-app navigation unmounts the editor without firing beforeunload.
@@ -73,5 +88,5 @@ export function useDebouncedSave(
     }
   }, [flush])
 
-  return { saving, saved, saveCount, error, flush }
+  return { pending, saving, saved, saveCount, error, flush }
 }

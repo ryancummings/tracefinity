@@ -11,6 +11,56 @@ describe('useDebouncedSave', () => {
     expect(result.current.saveCount).toBe(0)
   })
 
+  it('keeps saved visible after a successful save and clears it while the next edit is pending', async () => {
+    vi.useFakeTimers()
+    let value = 0
+    const saveFn = vi.fn().mockResolvedValue(undefined)
+    const { result, rerender } = renderHook(() =>
+      useDebouncedSave(saveFn, [value], 50, { skipInitial: true }),
+    )
+
+    expect(result.current.saved).toBe(true)
+    value = 1
+    rerender()
+    expect(result.current.pending).toBe(true)
+    expect(result.current.saved).toBe(false)
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(50) })
+    expect(result.current.pending).toBe(false)
+    expect(result.current.saved).toBe(true)
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    expect(result.current.saved).toBe(true)
+    vi.useRealTimers()
+  })
+
+  it('does not show saved when an older request finishes after a newer edit', async () => {
+    vi.useFakeTimers()
+    const resolvers: Array<() => void> = []
+    const saveFn = vi.fn(() => new Promise<void>(resolve => { resolvers.push(resolve) }))
+    let value = 0
+    const { result, rerender } = renderHook(() => useDebouncedSave(saveFn, [value], 50))
+
+    value = 1
+    rerender()
+    await act(async () => { await vi.advanceTimersByTimeAsync(50) })
+    expect(saveFn).toHaveBeenCalledTimes(1)
+
+    value = 2
+    rerender()
+    await act(async () => { await vi.advanceTimersByTimeAsync(50) })
+    expect(result.current.saved).toBe(false)
+    expect(saveFn).toHaveBeenCalledTimes(1)
+
+    await act(async () => { resolvers[0]() })
+    expect(result.current.saved).toBe(false)
+    expect(saveFn).toHaveBeenCalledTimes(2)
+
+    await act(async () => { resolvers[1]() })
+    expect(result.current.saved).toBe(true)
+    vi.useRealTimers()
+  })
+
   it('saves an edit immediately after hydration without saving the loaded state', async () => {
     vi.useFakeTimers()
     let ready = false

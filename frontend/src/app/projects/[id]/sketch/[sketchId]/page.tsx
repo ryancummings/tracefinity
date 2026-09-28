@@ -6,6 +6,7 @@ import { getProject, listBins, updateProjectSketch } from '@/lib/api'
 import type { BinProject, BinSummary, ProjectBinPlacement, ProjectSketch } from '@/types'
 import { Alert } from '@/components/Alert'
 import { Breadcrumb } from '@/components/Breadcrumb'
+import { EditorNavigation } from '@/components/EditorNavigation'
 import { NumericInput } from '@/components/NumericInput'
 import { BIN_DRAG_MIME, DrawerSketchCanvas } from '@/components/DrawerSketchCanvas'
 import { DrawerSketch3D } from '@/components/DrawerSketch3D'
@@ -31,7 +32,7 @@ import {
 } from '@/lib/drawerLayout'
 import { binLabel } from '@/lib/projectSelectors'
 import { cn } from '@/lib/utils'
-import { AlertTriangle, Box, Check, Copy, Grid2x2, LayoutGrid, Loader2, Palette, Plus, RotateCw, Sparkles, Trash2, TriangleAlert, X } from 'lucide-react'
+import { AlertTriangle, Box, Copy, Grid2x2, LayoutGrid, Loader2, Palette, Plus, RotateCw, Sparkles, Trash2, X } from 'lucide-react'
 
 type ViewMode = '2d' | '3d'
 
@@ -149,7 +150,7 @@ export default function ProjectSketchPage() {
   }, [arrangeMisfits, placements, overlapping, outOfBounds])
 
   // a rejection must reach the hook: catching it here would report the plan as saved
-  const { saving, saved, error: saveError, flush } = useDebouncedSave(
+  const { pending, saving, saved, error: saveError, flush } = useDebouncedSave(
     async () => {
       if (!project || !sketch) return
       await updateProjectSketch(project.id, sketch.id, {
@@ -367,19 +368,14 @@ export default function ProjectSketchPage() {
       <div className="w-[240px] flex-shrink-0 bg-surface border-r border-border flex flex-col">
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-3 space-y-3">
           <div className="glass rounded-[10px] px-3 py-3">
+            <div className="mb-2">
+              <EditorNavigation href={`/projects/${project.id}`} label="Back to project" pending={pending} saving={saving} saved={saved} error={saveError} />
+            </div>
             <div className="flex items-center gap-2 mb-3">
               <Breadcrumb segments={[
                 { label: project.name, href: `/projects/${project.id}` },
                 { label: sketch.name, editable: true, onEdit: handleRename },
               ]} />
-              {saving && <Loader2 className="w-3 h-3 animate-spin text-text-muted flex-shrink-0" />}
-              {saved && !saveError && <Check className="w-3 h-3 text-green-400 flex-shrink-0" />}
-              {saveError && !saving && (
-                <TriangleAlert
-                  className="w-3 h-3 text-red-400 flex-shrink-0"
-                  aria-label="Changes not saved"
-                />
-              )}
             </div>
             {saveError && (
               <div role="alert" className="mb-3 rounded-[8px] border border-red-800 bg-red-900/20 px-2 py-1.5 text-[11px] text-red-300">
