@@ -3,9 +3,15 @@
 import { ReactNode } from 'react'
 import { MousePointer2, Plus, Minus, Undo2, Redo2, Trash2, Circle, Disc, Square, RectangleHorizontal, Fingerprint, Magnet, RotateCw, RotateCcw, FlipHorizontal2, FlipVertical2, ChevronDown, PaintBucket, Locate, Columns2, Rows2, ArrowLeftRight, Waypoints } from 'lucide-react'
 import type { AxisOrientation, KeepSide } from '@/lib/symmetry'
-import type { FingerHole } from '@/types'
+import type { CutoutShape, FingerHole } from '@/types'
 import { SNAP_GRID_MIN, SNAP_GRID_MAX } from '@/lib/constants'
 import { NumericInput } from '@/components/NumericInput'
+import { getCutoutDefaults } from '@/lib/settings'
+
+function savedCutoutSize(shape: CutoutShape): string {
+  const size = getCutoutDefaults(shape)
+  return size.width && size.height ? `${size.width}×${size.height}mm` : `${size.radius * 2}mm`
+}
 
 export type EditMode = 'select' | 'add-vertex' | 'delete-vertex' | 'finger-hole' | 'circle' | 'cylinder' | 'square' | 'rectangle' | 'filleted_rectangle' | 'fill-ring'
 
@@ -124,12 +130,12 @@ export function ToolEditorToolbar({
                 <div className="fixed inset-0 z-10" onClick={() => setCutoutOpen(false)} />
                 <div className="absolute top-full left-0 mt-1 bg-elevated border border-border rounded-lg shadow-lg z-20 py-1 min-w-[210px]">
                   {([
-                    { mode: 'finger-hole' as EditMode, icon: <Fingerprint className="w-4 h-4" />, label: 'Finger hole', size: '15mm' },
-                    { mode: 'circle' as EditMode, icon: <Circle className="w-4 h-4" />, label: 'Circle (sphere)', size: '10mm' },
-                    { mode: 'cylinder' as EditMode, icon: <Disc className="w-4 h-4" />, label: 'Cylinder (flat)', size: '10mm' },
-                    { mode: 'square' as EditMode, icon: <Square className="w-4 h-4" />, label: 'Square', size: '20mm' },
-                    { mode: 'rectangle' as EditMode, icon: <RectangleHorizontal className="w-4 h-4" />, label: 'Rectangle', size: '30x20mm' },
-                    { mode: 'filleted_rectangle' as EditMode, icon: <RectangleHorizontal className="w-4 h-4" />, label: 'Filleted rectangle', size: '30x20mm' },
+                    { mode: 'finger-hole' as EditMode, icon: <Fingerprint className="w-4 h-4" />, label: 'Finger scoop', size: savedCutoutSize('scoop') },
+                    { mode: 'circle' as EditMode, icon: <Circle className="w-4 h-4" />, label: 'Circle (sphere)', size: savedCutoutSize('circle') },
+                    { mode: 'cylinder' as EditMode, icon: <Disc className="w-4 h-4" />, label: 'Cylinder (flat)', size: savedCutoutSize('cylinder') },
+                    { mode: 'square' as EditMode, icon: <Square className="w-4 h-4" />, label: 'Square', size: savedCutoutSize('square') },
+                    { mode: 'rectangle' as EditMode, icon: <RectangleHorizontal className="w-4 h-4" />, label: 'Rectangle', size: savedCutoutSize('rectangle') },
+                    { mode: 'filleted_rectangle' as EditMode, icon: <RectangleHorizontal className="w-4 h-4" />, label: 'Filleted rectangle', size: savedCutoutSize('filleted_rectangle') },
                   ]).map(item => (
                     <button
                       key={item.mode}

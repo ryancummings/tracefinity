@@ -47,6 +47,43 @@ def _make_bin_with_placed(tool_id, hole_ids, depth_override=None, hole_depth_ove
 
 
 class TestSyncPreservesOverrides:
+    def test_bin_cutout_edits_and_new_holes_survive_sync(self):
+        bin_data = _make_bin_with_placed("tool1", ["h1"])
+        placed = bin_data.placed_tools[0]
+        placed.finger_holes[0] = FingerHole(
+            id="h1", x=28, y=29, radius=4, shape="scoop",
+            bin_override=True, depth_override=12,
+        )
+        placed.finger_holes.append(FingerHole(
+            id="bin-fh-extra", x=31, y=26, radius=6,
+            shape="scoop", bin_override=True,
+        ))
+
+        sync_placed_tools(bin_data, _Store([_make_source_tool("tool1")]))
+
+        holes = {fh.id: fh for fh in placed.finger_holes}
+        assert set(holes) == {"h1", "bin-fh-extra"}
+        assert (holes["h1"].x, holes["h1"].y, holes["h1"].radius, holes["h1"].shape) == (28, 29, 4, "scoop")
+        assert holes["h1"].depth_override == 12
+
+    def test_placement_can_hide_library_hole(self):
+        bin_data = _make_bin_with_placed("tool1", ["h1"])
+        bin_data.placed_tools[0].finger_holes[0].disabled = True
+        bin_data.placed_tools[0].finger_holes[0].bin_override = True
+        sync_placed_tools(bin_data, _Store([_make_source_tool("tool1")]))
+        assert bin_data.placed_tools[0].finger_holes[0].disabled
+
+    def test_source_rectangle_orientation_tracks_placed_tool(self):
+        tool = _make_source_tool()
+        tool.finger_holes[0].shape = "rectangle"
+        tool.finger_holes[0].width = 12
+        tool.finger_holes[0].height = 5
+        tool.finger_holes[0].rotation = 15
+        bin_data = _make_bin_with_placed("tool1", ["h1"])
+        bin_data.placed_tools[0].rotation = 30
+        sync_placed_tools(bin_data, _Store([tool]))
+        assert bin_data.placed_tools[0].finger_holes[0].rotation == 45
+
     def test_per_hole_depth_override_survives_sync(self):
         bin_data = _make_bin_with_placed("tool1", ["h1"], hole_depth_overrides={"h1": 25.0})
         tools = _Store([_make_source_tool("tool1", ("h1",))])

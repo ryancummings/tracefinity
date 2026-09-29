@@ -68,8 +68,10 @@ class FingerHole(BaseModel):
     width: float | None = None  # for rectangles
     height: float | None = None  # for rectangles
     rotation: float = 0.0  # degrees
-    shape: Literal["circle", "cylinder", "square", "rectangle", "filleted_rectangle"] = "circle"
+    shape: Literal["circle", "cylinder", "scoop", "square", "rectangle", "filleted_rectangle"] = "circle"
     depth_override: float | None = None  # mm; None = use bin_config.cutout_depth
+    bin_override: bool = False  # placement owns this cutout's shape and position
+    disabled: bool = False  # placement-level deletion of a library cutout
 
 
 class TextLabel(BaseModel):

@@ -570,6 +570,7 @@ export default function BinPage() {
                 wallThickness={config.wall_thickness}
                 defaultCutoutDepth={config.cutout_depth}
                 maxCutoutDepth={calcMaxCutoutDepth(config.height_units)}
+                insertAllowance={config.insert_enabled ? config.insert_height : 0}
                 halfGridBase={config.half_grid_base}
                 onEditTool={(toolId) => router.push(projectSource.scopedHref(`/tools/${toolId}`))}
                 smoothedToolIds={smoothedToolIds}

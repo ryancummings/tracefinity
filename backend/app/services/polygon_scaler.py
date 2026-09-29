@@ -75,6 +75,8 @@ class ScaledFingerHole:
         height_mm: float | None = None,
         rotation: float = 0.0,
         depth_override: float | None = None,
+        disabled: bool = False,
+        bin_override: bool = False,
     ):
         self.id = id
         self.x_mm = x_mm
@@ -85,6 +87,8 @@ class ScaledFingerHole:
         self.height_mm = height_mm
         self.rotation = rotation
         self.depth_override = depth_override
+        self.disabled = disabled
+        self.bin_override = bin_override
 
     @classmethod
     def from_finger_hole(cls, fh: FingerHole, scale: float = 1.0) -> "ScaledFingerHole":
@@ -94,6 +98,7 @@ class ScaledFingerHole:
             fh.id, fh.x * scale, fh.y * scale, fh.radius,
             shape=fh.shape, width_mm=fh.width, height_mm=fh.height,
             rotation=fh.rotation, depth_override=fh.depth_override,
+            disabled=fh.disabled, bin_override=fh.bin_override,
         )
 
 

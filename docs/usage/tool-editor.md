@@ -14,15 +14,16 @@ Open the editor by clicking a tool in your library. The toolbar controls what ha
 
 ## Cutouts
 
-The cutout dropdown provides five pocket types. Click on the canvas to place one.
+The cutout dropdown provides six pocket types. Click on the canvas to place one. New cutout sizes come from the Settings page.
 
 | Type | Default size | Shape |
 |-|-|-|
-| Finger hole | 15mm radius | Spherical pocket for lifting tools out |
+| Finger scoop | 15mm radius | Straight opening with a bevel at the flat floor for finger access |
 | Circle | 10mm radius | Spherical pocket |
 | Cylinder | 10mm radius | Flat-bottomed circular pocket |
 | Square | 20mm side | Square pocket |
 | Rectangle | 30 x 20mm | Rectangular pocket |
+| Filleted rectangle | 30 x 20mm | Rounded bottom corners |
 
 Once placed:
 
@@ -31,6 +32,8 @@ Once placed:
 - Rotation handle on rectangular cutouts.
 - Per-hole depth override (overrides the bin's cutout depth for this hole only).
 - Select a hole and click Delete to remove it.
+
+The bin editor also places cutouts on individual tool placements. Choose Add cutout, select the tool that will own it, then click where the cutout should go. The target tool is highlighted and named while you place cutouts. Select a cutout to drag it or use its inspector to change its shape, dimensions, position, rotation, and depth. Round cutouts also have a drag handle for resizing. These changes belong to that bin; source tool cutouts still update other bins. Select a tool in the bin editor to open its settings panel and set its pocket depth. The panel shows the maximum depth allowed by the current bin height and floor. The tool uses the bin's Cutout Depth until you enter a different value; an individual cutout can override that depth again. Settings holds saved cutout sizes, default text size, and new-bin options.
 
 ## Smooth vs Accurate
 

@@ -1,12 +1,16 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import type { PlacedTool, TextLabel } from '@/types'
+import type { CutoutShape, FingerHole, PlacedTool, TextLabel } from '@/types'
 import { snapToGrid as snapToGridUtil } from '@/lib/svg'
 import { GRID_UNIT, DISPLAY_SCALE, SNAP_GRID } from '@/lib/constants'
 import { BinEditorToolbar } from '@/components/BinEditorToolbar'
 import { BinEditorCanvas } from '@/components/BinEditorCanvas'
 import { useDeleteShortcut } from '@/hooks/useDeleteShortcut'
+import { getCutoutDefaults, getSettings } from '@/lib/settings'
+import { BinCutoutInspector } from '@/components/BinCutoutInspector'
+import { BinToolInspector } from '@/components/BinToolInspector'
+import { cutoutShapeLabel, resizeRoundCutout } from '@/lib/cutouts'
 
 interface Props {
   placedTools: PlacedTool[]
@@ -21,6 +25,7 @@ interface Props {
   wallThickness: number
   defaultCutoutDepth: number
   maxCutoutDepth: number
+  insertAllowance?: number
   halfGridBase?: boolean
   onEditTool?: (toolId: string) => void
   smoothedToolIds?: Set<string>
@@ -30,7 +35,7 @@ interface Props {
   onDraggingChange?: (dragging: boolean) => void
 }
 
-type Tool = 'select' | 'text'
+type Tool = 'select' | 'text' | 'choose-cutout-tool' | 'cutout'
 
 type Selection =
   | { type: 'tool'; toolId: string }
@@ -40,9 +45,11 @@ type Selection =
 
 type DragState =
   | { type: 'tool'; toolId: string; startX: number; startY: number; origPoints: { x: number; y: number }[]; origHoles: { id: string; x: number; y: number }[]; origInteriorRings: { x: number; y: number }[][] }
-  | { type: 'rotate'; toolId: string; centerX: number; centerY: number; startAngle: number; origRotation: number; origPoints: { x: number; y: number }[]; origHoles: { id: string; x: number; y: number }[]; origInteriorRings: { x: number; y: number }[][] }
+  | { type: 'rotate'; toolId: string; centerX: number; centerY: number; startAngle: number; origRotation: number; origPoints: { x: number; y: number }[]; origHoles: { id: string; x: number; y: number; rotation: number }[]; origInteriorRings: { x: number; y: number }[][] }
   | { type: 'label'; labelId: string; startX: number; startY: number; origX: number; origY: number }
   | { type: 'rotate-label'; labelId: string; centerX: number; centerY: number; startAngle: number; origRotation: number }
+  | { type: 'hole'; toolId: string; holeId: string; startX: number; startY: number; origX: number; origY: number }
+  | { type: 'resize-hole'; toolId: string; holeId: string; centerX: number; centerY: number }
   | null
 
 export function BinEditor({
@@ -58,6 +65,7 @@ export function BinEditor({
   wallThickness,
   defaultCutoutDepth,
   maxCutoutDepth,
+  insertAllowance = 0,
   halfGridBase,
   onEditTool,
   smoothedToolIds,
@@ -69,6 +77,9 @@ export function BinEditor({
   const svgRef = useRef<SVGSVGElement>(null)
   const [selection, setSelection] = useState<Selection>(null)
   const [activeTool, setActiveTool] = useState<Tool>('select')
+  const [cutoutShape, setCutoutShape] = useState<CutoutShape>('scoop')
+  const [cutoutToolId, setCutoutToolId] = useState<string | null>(null)
+  const [cutoutHover, setCutoutHover] = useState<{ x: number; y: number } | null>(null)
   const [dragging, setDragging] = useState<DragState>(null)
   const [snapEnabled, setSnapEnabled] = useState(false)
   const [snapGrid, setSnapGrid] = useState(SNAP_GRID)
@@ -156,7 +167,8 @@ export function BinEditor({
   }, [snapEnabled, snapGrid])
 
   const handleToolMouseDown = (toolId: string) => (e: React.MouseEvent) => {
-    if (activeTool === 'text') return
+    if (activeTool === 'choose-cutout-tool') return
+    if (activeTool !== 'select') return
     e.stopPropagation()
     const tool = placedTools.find(t => t.id === toolId)
     if (!tool) return
@@ -169,13 +181,32 @@ export function BinEditor({
       startX: pos.x,
       startY: pos.y,
       origPoints: tool.points.map(p => ({ x: p.x, y: p.y })),
-      origHoles: tool.finger_holes.map(fh => ({ id: fh.id, x: fh.x, y: fh.y })),
+      origHoles: tool.finger_holes.map(fh => ({ id: fh.id, x: fh.x, y: fh.y, rotation: fh.rotation ?? 0 })),
       origInteriorRings: (tool.interior_rings ?? []).map(ring => ring.map(p => ({ x: p.x, y: p.y }))),
     })
   }
 
+  const handleChooseCutoutTool = (toolId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelection({ type: 'tool', toolId })
+    setCutoutToolId(toolId)
+    setActiveTool('cutout')
+  }
+
   const stopClick = (e: React.MouseEvent) => e.stopPropagation()
-  const stopClickUnlessText = (e: React.MouseEvent) => { if (activeTool !== 'text') e.stopPropagation() }
+  const stopClickUnlessText = (e: React.MouseEvent) => { if (activeTool === 'select' || activeTool === 'choose-cutout-tool') e.stopPropagation() }
+
+  const startCutout = () => {
+    const ownerId = selection?.type === 'tool' || selection?.type === 'hole' ? selection.toolId : null
+    setCutoutToolId(ownerId)
+    setCutoutHover(null)
+    setActiveTool(ownerId ? 'cutout' : 'choose-cutout-tool')
+  }
+
+  const changeActiveTool = (next: Tool) => {
+    setActiveTool(next)
+    if (next !== 'cutout') { setCutoutToolId(null); setCutoutHover(null) }
+  }
 
   const handleRotateMouseDown = (toolId: string) => (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -192,7 +223,7 @@ export function BinEditor({
       centerX, centerY, startAngle,
       origRotation: tool.rotation || 0,
       origPoints: tool.points.map(p => ({ x: p.x, y: p.y })),
-      origHoles: tool.finger_holes.map(fh => ({ id: fh.id, x: fh.x, y: fh.y })),
+      origHoles: tool.finger_holes.map(fh => ({ id: fh.id, x: fh.x, y: fh.y, rotation: fh.rotation ?? 0 })),
       origInteriorRings: (tool.interior_rings ?? []).map(ring => ring.map(p => ({ x: p.x, y: p.y }))),
     })
   }
@@ -343,7 +374,7 @@ export function BinEditor({
               if (!orig) return fh
               const fdx = orig.x - cx
               const fdy = orig.y - cy
-              return { ...fh, x: cx + fdx * cos - fdy * sin, y: cy + fdx * sin + fdy * cos }
+              return { ...fh, x: cx + fdx * cos - fdy * sin, y: cy + fdx * sin + fdy * cos, rotation: (orig.rotation + deltaDeg) % 360 }
             }),
             interior_rings: dragging.origInteriorRings.map(ring =>
               ring.map(p => {
@@ -355,6 +386,17 @@ export function BinEditor({
           }
         })
         onChange(updated)
+      } else if (dragging.type === 'hole') {
+        const x = snapToGrid(dragging.origX + pos.x - dragging.startX)
+        const y = snapToGrid(dragging.origY + pos.y - dragging.startY)
+        onChange(currentTools.map(t => t.id === dragging.toolId ? {
+          ...t, finger_holes: t.finger_holes.map(fh => fh.id === dragging.holeId ? { ...fh, x, y, bin_override: true } : fh),
+        } : t))
+      } else if (dragging.type === 'resize-hole') {
+        const radius = resizeRoundCutout(dragging.centerX, dragging.centerY, pos.x, pos.y)
+        onChange(currentTools.map(t => t.id === dragging.toolId ? {
+          ...t, finger_holes: t.finger_holes.map(fh => fh.id === dragging.holeId ? { ...fh, radius, bin_override: true } : fh),
+        } : t))
       } else if (dragging.type === 'label') {
         const dx = pos.x - dragging.startX
         const dy = pos.y - dragging.startY
@@ -412,14 +454,6 @@ export function BinEditor({
     setSelection(null)
   }
 
-  useDeleteShortcut(
-    () => {
-      if (selection?.type === 'tool') handleDeleteTool()
-      if (selection?.type === 'label') handleDeleteLabel()
-    },
-    selection?.type === 'tool' || selection?.type === 'label',
-  )
-
   const commitPendingLabel = useCallback(() => {
     if (!pendingLabel || !pendingText.trim()) {
       setPendingLabel(null)
@@ -431,7 +465,7 @@ export function BinEditor({
       text: pendingText.trim(),
       x: pendingLabel.x,
       y: pendingLabel.y,
-      font_size: 5,
+      font_size: getSettings().textSize ?? 5,
       rotation: 0,
       emboss: true,
       depth: 0.5,
@@ -443,6 +477,22 @@ export function BinEditor({
   }, [pendingLabel, pendingText, textLabels, onTextLabelsChange])
 
   const handleBackgroundClick = (e: React.MouseEvent) => {
+    if (activeTool === 'cutout') {
+      const pos = screenToMm(e.clientX, e.clientY)
+      if (pos.x < 0 || pos.x > binWidthMm || pos.y < 0 || pos.y > binHeightMm) return
+      const tool = placedTools.find(t => t.id === cutoutToolId)
+      if (!tool) return
+      const hole: FingerHole = {
+        id: `bin-fh-${crypto.randomUUID()}`,
+        x: snapToGrid(pos.x), y: snapToGrid(pos.y), rotation: 0,
+        ...getCutoutDefaults(cutoutShape), shape: cutoutShape, bin_override: true,
+      }
+      onPlacedToolsChange(placedTools.map(t => t.id === tool.id ? { ...t, finger_holes: [...t.finger_holes, hole] } : t))
+      setSelection({ type: 'hole', toolId: tool.id, holeId: hole.id })
+      changeActiveTool('select')
+      return
+    }
+    if (activeTool === 'choose-cutout-tool') return
     if (activeTool === 'text') {
       if (pendingLabel) {
         commitPendingLabel()
@@ -478,6 +528,8 @@ export function BinEditor({
         .find(t => t.id === selection.toolId)
         ?.finger_holes.find(fh => fh.id === selection.holeId)
     : null
+  const selectedHoleTool = selection?.type === 'hole' ? placedTools.find(t => t.id === selection.toolId) : null
+  const cutoutTool = cutoutToolId ? placedTools.find(t => t.id === cutoutToolId) : null
 
   const updateSelectedLabel = (updates: Partial<TextLabel>) => {
     if (selection?.type !== 'label') return
@@ -505,9 +557,47 @@ export function BinEditor({
     }))
   }
 
+  const updateSelectedHole = (updates: Partial<FingerHole>) => {
+    if (selection?.type !== 'hole') return
+    onPlacedToolsChange(placedTools.map(t => t.id === selection.toolId ? {
+      ...t, finger_holes: t.finger_holes.map(fh => fh.id === selection.holeId ? { ...fh, ...updates, bin_override: true } : fh),
+    } : t))
+  }
+
+  const removeSelectedHole = () => {
+    if (selection?.type !== 'hole') return
+    onPlacedToolsChange(placedTools.map(t => t.id === selection.toolId ? {
+      ...t, finger_holes: t.finger_holes.filter(fh => fh.id !== selection.holeId || !fh.bin_override || !fh.id.startsWith('bin-fh-')).map(fh =>
+        fh.id === selection.holeId ? { ...fh, disabled: true, bin_override: true } : fh),
+    } : t))
+    setSelection(null)
+  }
+
+  useDeleteShortcut(
+    () => {
+      if (selection?.type === 'tool') handleDeleteTool()
+      if (selection?.type === 'label') handleDeleteLabel()
+      if (selection?.type === 'hole') removeSelectedHole()
+    },
+    selection?.type === 'tool' || selection?.type === 'label' || selection?.type === 'hole',
+  )
+
   const handleHoleClick = (toolId: string, holeId: string, e: React.MouseEvent) => {
     e.stopPropagation()
     setSelection({ type: 'hole', toolId, holeId })
+    if (activeTool !== 'select') return
+    const hole = placedTools.find(t => t.id === toolId)?.finger_holes.find(fh => fh.id === holeId)
+    if (!hole) return
+    const pos = screenToMm(e.clientX, e.clientY)
+    setDragging({ type: 'hole', toolId, holeId, startX: pos.x, startY: pos.y, origX: hole.x, origY: hole.y })
+  }
+
+  const handleHoleResizeMouseDown = (toolId: string, holeId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    const hole = placedTools.find(t => t.id === toolId)?.finger_holes.find(fh => fh.id === holeId)
+    if (!hole) return
+    setDragging({ type: 'resize-hole', toolId, holeId, centerX: hole.x, centerY: hole.y })
   }
 
   const handleEditingLabelKeyDown = (e: React.KeyboardEvent) => {
@@ -526,30 +616,39 @@ export function BinEditor({
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 glass-toolbar px-1.5 py-1 flex items-center gap-0.5">
         <BinEditorToolbar
           activeTool={activeTool}
-          setActiveTool={setActiveTool}
+          setActiveTool={changeActiveTool}
+          onStartCutout={startCutout}
           snapEnabled={snapEnabled}
           setSnapEnabled={setSnapEnabled}
           snapGrid={snapGrid}
           setSnapGrid={setSnapGrid}
           handleRecenter={handleRecenter}
-          selectedTool={selectedTool ?? null}
           selectedLabel={selectedLabel ?? null}
-          selectedHole={selectedHole ?? null}
-          selectedHoleToolId={selection?.type === 'hole' ? selection.toolId : null}
-          onEditTool={onEditTool}
-          onRemoveTool={handleDeleteTool}
           onRemoveLabel={handleDeleteLabel}
-          smoothedToolIds={smoothedToolIds}
-          smoothLevels={smoothLevels}
-          onToggleSmoothed={onToggleSmoothed}
-          onSmoothLevelChange={onSmoothLevelChange}
           onUpdateLabel={updateSelectedLabel}
-          defaultCutoutDepth={defaultCutoutDepth}
-          maxCutoutDepth={maxCutoutDepth}
-          onSetCutoutDepthOverride={setCutoutDepthOverride}
-          onSetHoleDepthOverride={setHoleDepthOverride}
+          cutoutShape={cutoutShape}
+          onCutoutShapeChange={setCutoutShape}
         />
       </div>
+      {(activeTool === 'choose-cutout-tool' || activeTool === 'cutout') && (
+        <div role="status" className="absolute top-16 left-1/2 -translate-x-1/2 z-20 glass rounded-lg px-3 py-2 text-xs text-text-primary shadow-lg">
+          {cutoutTool ? <>Placing {cutoutShapeLabel(cutoutShape)} for <strong>{cutoutTool.name}</strong>. Click anywhere in the bin, including beside its outline. Press Select to cancel.</> : 'Click a tool to choose which tool owns the cutout.'}
+        </div>
+      )}
+      {selectedHole && selectedHoleTool && activeTool === 'select' && (
+        <BinCutoutInspector
+          hole={selectedHole} tool={selectedHoleTool} binDepth={defaultCutoutDepth} maxDepth={maxCutoutDepth}
+          onUpdate={updateSelectedHole} onDepthChange={d => setHoleDepthOverride(selectedHoleTool.id, selectedHole.id, d)} onRemove={removeSelectedHole}
+        />
+      )}
+      {selectedTool && activeTool === 'select' && (
+        <BinToolInspector
+          key={selectedTool.id} tool={selectedTool} binDepth={defaultCutoutDepth} maxDepth={maxCutoutDepth}
+          smoothed={smoothedToolIds?.has(selectedTool.tool_id) ?? false} smoothLevel={smoothLevels?.get(selectedTool.tool_id) ?? 0.5}
+          onToggleSmoothed={onToggleSmoothed} onSmoothLevelChange={onSmoothLevelChange}
+          onDepthChange={d => setCutoutDepthOverride(selectedTool.id, d)} onEdit={onEditTool} onRemove={handleDeleteTool}
+        />
+      )}
       <BinEditorCanvas
         svgRef={svgRef}
         displayWidth={displayWidth}
@@ -571,9 +670,16 @@ export function BinEditor({
         smoothedToolIds={smoothedToolIds}
         smoothLevels={smoothLevels}
         activeTool={activeTool}
+        cutoutToolId={cutoutToolId}
+        cutoutHover={cutoutHover}
+        cutoutShape={cutoutShape}
+        onCutoutHover={e => setCutoutHover(e ? screenToMm(e.clientX, e.clientY) : null)}
+        onHoleResizeMouseDown={handleHoleResizeMouseDown}
         binWidthMm={binWidthMm}
         binHeightMm={binHeightMm}
         defaultCutoutDepth={defaultCutoutDepth}
+        maxCutoutDepth={maxCutoutDepth}
+        insertAllowance={insertAllowance}
         halfGridBase={halfGridBase}
         handleR={handleR}
         handleStroke={handleStroke}
@@ -581,6 +687,7 @@ export function BinEditor({
         pendingInputRef={pendingInputRef}
         editInputRef={editInputRef}
         handleToolMouseDown={handleToolMouseDown}
+        onChooseCutoutTool={handleChooseCutoutTool}
         handleRotateMouseDown={handleRotateMouseDown}
         handleLabelMouseDown={handleLabelMouseDown}
         handleLabelRotateMouseDown={handleLabelRotateMouseDown}

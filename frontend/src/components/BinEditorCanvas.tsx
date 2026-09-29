@@ -1,12 +1,14 @@
 'use client'
 
 import { RefObject } from 'react'
-import type { PlacedTool, TextLabel } from '@/types'
+import type { CutoutShape, FingerHole, PlacedTool, TextLabel } from '@/types'
 import { polygonPathData, smoothPathData, simplifyPolygon, smoothEpsilon } from '@/lib/svg'
 import { GRID_UNIT, DISPLAY_SCALE } from '@/lib/constants'
 import { CutoutOverlay } from '@/components/CutoutOverlay'
+import { getCutoutDefaults } from '@/lib/settings'
+import { isRectangularCutout } from '@/lib/cutouts'
 
-type Tool = 'select' | 'text'
+type Tool = 'select' | 'text' | 'choose-cutout-tool' | 'cutout'
 
 type Selection =
   | { type: 'tool'; toolId: string }
@@ -34,9 +36,16 @@ interface Props {
   smoothedToolIds?: Set<string>
   smoothLevels?: Map<string, number>
   activeTool: Tool
+  cutoutToolId: string | null
+  cutoutHover: { x: number; y: number } | null
+  cutoutShape: CutoutShape
+  onCutoutHover: (e: React.MouseEvent | null) => void
+  onHoleResizeMouseDown: (toolId: string, holeId: string, e: React.MouseEvent) => void
   binWidthMm: number
   binHeightMm: number
   defaultCutoutDepth: number
+  maxCutoutDepth: number
+  insertAllowance: number
   halfGridBase?: boolean
   // handle sizing
   handleR: number
@@ -47,6 +56,7 @@ interface Props {
   editInputRef: RefObject<HTMLInputElement | null>
   // event handlers
   handleToolMouseDown: (toolId: string) => (e: React.MouseEvent) => void
+  onChooseCutoutTool: (toolId: string, e: React.MouseEvent) => void
   handleRotateMouseDown: (toolId: string) => (e: React.MouseEvent) => void
   handleLabelMouseDown: (labelId: string) => (e: React.MouseEvent) => void
   handleLabelRotateMouseDown: (labelId: string) => (e: React.MouseEvent) => void
@@ -83,9 +93,16 @@ export function BinEditorCanvas({
   smoothedToolIds,
   smoothLevels,
   activeTool,
+  cutoutToolId,
+  cutoutHover,
+  cutoutShape,
+  onCutoutHover,
+  onHoleResizeMouseDown,
   binWidthMm,
   binHeightMm,
   defaultCutoutDepth,
+  maxCutoutDepth,
+  insertAllowance,
   halfGridBase,
   handleR,
   handleStroke,
@@ -93,6 +110,7 @@ export function BinEditorCanvas({
   pendingInputRef,
   editInputRef,
   handleToolMouseDown,
+  onChooseCutoutTool,
   handleRotateMouseDown,
   handleLabelMouseDown,
   handleLabelRotateMouseDown,
@@ -120,6 +138,8 @@ export function BinEditorCanvas({
           className={`rounded max-w-full max-h-full ${activeTool === 'select' ? 'cursor-default' : 'cursor-crosshair'}`}
           style={{ overflow: 'visible' }}
           onClick={handleBackgroundClick}
+          onMouseMove={e => { if (activeTool === 'cutout') onCutoutHover(e) }}
+          onMouseLeave={() => onCutoutHover(null)}
         >
           <rect x="0" y="0" width={displayWidth} height={displayHeight} fill="rgb(30, 41, 59)" rx="4" />
           {/* full-grid lines at every 0.5-unit step up to gridX */}
@@ -199,7 +219,7 @@ export function BinEditorCanvas({
             } else {
               pathData = polygonPathData(tool.points, tool.interior_rings, DISPLAY_SCALE)
             }
-            const isSelected = selection?.type === 'tool' && selection.toolId === tool.id
+            const isSelected = (selection?.type === 'tool' && selection.toolId === tool.id) || (activeTool === 'cutout' && cutoutToolId === tool.id)
             const isOversized = oversizedToolIds?.has(tool.id) ?? false
 
             return (
@@ -213,21 +233,42 @@ export function BinEditorCanvas({
                   strokeWidth={handleStroke}
                   strokeDasharray={isOversized ? '8,5' : undefined}
                   aria-label={isOversized ? `${tool.name} may be clipped outside the printable area` : undefined}
-                  className={activeTool === 'text' ? 'cursor-crosshair' : 'cursor-move'}
+                  className={activeTool === 'select' ? 'cursor-move' : 'cursor-crosshair'}
                   onMouseDown={handleToolMouseDown(tool.id)}
-                  onClick={stopClickUnlessText}
+                  onClick={activeTool === 'choose-cutout-tool' ? e => onChooseCutoutTool(tool.id, e) : stopClickUnlessText}
                 />
 
-                <CutoutOverlay
-                  holes={tool.finger_holes}
-                  interactive={activeTool === 'select'}
-                  selectedId={selection?.type === 'hole' && selection.toolId === tool.id ? selection.holeId : undefined}
-                  defaultCutoutDepth={tool.depth_override ?? defaultCutoutDepth}
-                  onMouseDown={(holeId, e) => onHoleClick(tool.id, holeId, e)}
-                />
               </g>
             )
           })}
+
+          {/* Overlay cutouts after all outlines so another tool cannot hide them. */}
+          {placedTools.map(tool => (
+            <CutoutOverlay
+              key={`holes-${tool.id}`}
+              holes={tool.finger_holes}
+              interactive={activeTool === 'select'}
+              selectedId={selection?.type === 'hole' && selection.toolId === tool.id ? selection.holeId : undefined}
+              editMode={activeTool}
+              defaultCutoutDepth={tool.depth_override ?? defaultCutoutDepth}
+              maxCutoutDepth={maxCutoutDepth}
+              insertAllowance={insertAllowance}
+              onMouseDown={(holeId, e) => onHoleClick(tool.id, holeId, e)}
+              onClick={stopClick}
+            />
+          ))}
+
+          {selection?.type === 'hole' && activeTool === 'select' && (() => {
+            const hole = placedTools.find(t => t.id === selection.toolId)?.finger_holes.find(h => h.id === selection.holeId)
+            if (!hole || isRectangularCutout(hole.shape)) return null
+            return <circle aria-label="Resize cutout" cx={(hole.x + hole.radius) * DISPLAY_SCALE} cy={hole.y * DISPLAY_SCALE} r={Math.max(7, handleR * 0.45)} fill="rgb(90, 180, 222)" stroke="white" strokeWidth={2} className="cursor-ew-resize" onMouseDown={e => onHoleResizeMouseDown(selection.toolId, hole.id, e)} onClick={stopClick} />
+          })()}
+
+          {activeTool === 'cutout' && cutoutToolId && cutoutHover && cutoutHover.x >= 0 && cutoutHover.y >= 0 && cutoutHover.x <= binWidthMm && cutoutHover.y <= binHeightMm && (
+            <g opacity={0.55} className="pointer-events-none">
+              <CutoutOverlay holes={[{ id: 'cutout-preview', ...cutoutHover, shape: cutoutShape, rotation: 0, ...getCutoutDefaults(cutoutShape) } as FingerHole]} />
+            </g>
+          )}
 
           {/* text labels */}
           {textLabels.map(label => {

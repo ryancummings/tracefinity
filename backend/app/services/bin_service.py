@@ -34,15 +34,23 @@ def sync_placed_tools(bin_data, user_tools) -> bool:
         # source-tool holes to existing placed holes by id. without this,
         # GET /bins/{id} silently overwrites stored overrides on every load.
         # a hole the placement has not seen yet keeps the library value.
-        existing_overrides = {fh.id: fh.depth_override for fh in pt.finger_holes}
+        existing_holes = {fh.id: fh for fh in pt.finger_holes}
         new_fh = []
         for fh in tool.finger_holes:
+            existing = existing_holes.get(fh.id)
+            if existing and existing.bin_override:
+                new_fh.append(existing)
+                continue
             rx = (fh.x - lib_cx) * cos_r - (fh.y - lib_cy) * sin_r
             ry = (fh.x - lib_cx) * sin_r + (fh.y - lib_cy) * cos_r
             new_fh.append(fh.model_copy(update={
                 "x": placed_cx + rx, "y": placed_cy + ry,
-                "depth_override": existing_overrides.get(fh.id, fh.depth_override),
+                "rotation": fh.rotation + pt.rotation,
+                "depth_override": existing.depth_override if existing else fh.depth_override,
             }))
+        # Bin-created holes belong to this placement and have no library peer.
+        source_ids = {fh.id for fh in tool.finger_holes}
+        new_fh.extend(fh for fh in pt.finger_holes if fh.bin_override and fh.id not in source_ids)
 
         new_rings = []
         for ring in (tool.interior_rings or []):

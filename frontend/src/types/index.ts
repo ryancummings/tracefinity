@@ -22,9 +22,11 @@ export interface FingerHole {
   width?: number
   height?: number
   depth_override?: number | null
+  bin_override?: boolean
+  disabled?: boolean
 }
 
-export type CutoutShape = 'circle' | 'cylinder' | 'square' | 'rectangle' | 'filleted_rectangle'
+export type CutoutShape = 'circle' | 'cylinder' | 'scoop' | 'square' | 'rectangle' | 'filleted_rectangle'
 
 export interface Polygon {
   id: string

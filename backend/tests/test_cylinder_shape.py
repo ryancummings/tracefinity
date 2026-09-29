@@ -51,6 +51,59 @@ def _has_point(profile, x: float, y: float, tol: float = 1e-9) -> bool:
 
 
 class TestCylinderShape:
+    def test_scoop_has_straight_opening_and_bevel_at_floor(self):
+        poly = _scaled_poly_with_hole("scoop", radius=10)
+        result = _make_finger_holes(
+            [poly], BinParams(cutout_depth=15), wall_top_z=30,
+            max_depth=15, offset_x=0, offset_y=0,
+        )
+        assert result is not None
+        box = result.bounding_box()
+        assert abs(box[2] - 15) < 0.05
+        assert abs(box[5] - 30) < 0.05
+        assert box[3] - box[0] > 19.5
+        assert result.volume() > 0
+        near_floor = result.slice(15.1).bounds()
+        middle_bevel = result.slice(16.5).bounds()
+        above_bevel = result.slice(18.1).bounds()
+        opening = result.slice(29.9).bounds()
+        assert 14.0 < near_floor[2] - near_floor[0] < 14.4
+        assert 16.8 < middle_bevel[2] - middle_bevel[0] < 17.2
+        assert above_bevel[2] - above_bevel[0] > 19.5
+        assert opening[2] - opening[0] > 19.5
+
+    def test_shallow_scoop_limits_floor_bevel_to_depth(self):
+        poly = _scaled_poly_with_hole("scoop", radius=10)
+        result = _make_finger_holes(
+            [poly], BinParams(cutout_depth=5), wall_top_z=30,
+            max_depth=5, offset_x=0, offset_y=0,
+        )
+        assert result is not None
+        floor = result.slice(25.1).bounds()
+        assert 15.6 < floor[2] - floor[0] < 15.8  # floor radius 10 - 0.45*5, just above floor
+
+    def test_scoop_respects_explicit_top_chamfer(self):
+        poly = _scaled_poly_with_hole("scoop", radius=10)
+        result = _make_finger_hole_chamfers(
+            [poly], BinParams(cutout_depth=15, cutout_chamfer=1),
+            wall_top_z=30, chamfer_size=1, max_depth=15,
+            offset_x=0, offset_y=0,
+        )
+        assert result is not None
+        top = result.slice(29.9).bounds()
+        assert top[2] - top[0] > 21.5
+
+    def test_rotated_rectangle_follows_svg_y_down_rotation(self):
+        poly = _scaled_poly_with_rectangle_hole("rectangle", width=30, height=10, rotation=30)
+        result = _make_finger_holes(
+            [poly], BinParams(cutout_depth=10), wall_top_z=30,
+            max_depth=10, offset_x=0, offset_y=0,
+        )
+        points = result.slice(25).to_polygons()[0]
+        edges = [(points[(i + 1) % len(points)] - point) for i, point in enumerate(points)]
+        long_edge = max(edges, key=lambda edge: edge[0] ** 2 + edge[1] ** 2)
+        assert long_edge[0] * long_edge[1] < 0  # +30° SVG becomes -30° in manifold
+
     def test_cylinder_produces_cutter(self):
         poly = _scaled_poly_with_hole("cylinder")
         config = BinParams(cutout_depth=15.0)

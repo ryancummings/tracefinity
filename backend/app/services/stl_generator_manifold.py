@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 from app.constants import GF_GRID
 
 # Bump when geometry changes so saved previews and exports regenerate.
-STL_GEOMETRY_VERSION = 2
+STL_GEOMETRY_VERSION = 5
 
 GF_HALF_GRID = GF_GRID / 2  # 21mm
 GF_HEIGHT_UNIT = 7.0
@@ -979,6 +979,8 @@ def _make_finger_holes(
     cutters = []
     for poly in polygons:
         for fh in poly.finger_holes:
+            if getattr(fh, 'disabled', False):
+                continue
             fh_x = fh.x_mm + offset_x
             fh_y = -(fh.y_mm + offset_y)
             shape = getattr(fh, 'shape', 'circle')
@@ -1001,12 +1003,27 @@ def _make_finger_holes(
                         mf.Manifold.cylinder(pocket_depth + 0.01, r, circular_segments=ROUND_SEGS)
                         .translate((fh_x, fh_y, wall_top_z - pocket_depth))
                     )
+                elif shape == 'scoop':
+                    # Keep the opening straight-sided; the bevel is at the
+                    # floor, leaving a smaller flat area at full depth.
+                    r = fh.radius_mm
+                    bevel = min(r * 0.3, pocket_depth * 0.45)
+                    floor_r = r - bevel
+                    wall = mf.Manifold.cylinder(
+                        pocket_depth - bevel + 0.01, r,
+                        circular_segments=ROUND_SEGS,
+                    ).translate((fh_x, fh_y, wall_top_z - pocket_depth + bevel))
+                    floor_bevel = mf.Manifold.extrude(
+                        mf.CrossSection.circle(floor_r, circular_segments=ROUND_SEGS),
+                        bevel + 0.01, scale_top=(r / floor_r, r / floor_r),
+                    ).translate((fh_x, fh_y, wall_top_z - pocket_depth))
+                    cutter = wall + floor_bevel
                 elif shape == 'square':
                     size = fh.radius_mm * 2
                     cut_z = wall_top_z - pocket_depth / 2
                     cutter = (
                         mf.Manifold.cube((size, size, pocket_depth + 0.01), center=True)
-                        .rotate((0.0, 0.0, rotation))
+                        .rotate((0.0, 0.0, -rotation))
                         .translate((fh_x, fh_y, cut_z))
                     )
                 elif shape == 'rectangle':
@@ -1015,14 +1032,14 @@ def _make_finger_holes(
                     cut_z = wall_top_z - pocket_depth / 2
                     cutter = (
                         mf.Manifold.cube((w, h, pocket_depth + 0.01), center=True)
-                        .rotate((0.0, 0.0, rotation))
+                        .rotate((0.0, 0.0, -rotation))
                         .translate((fh_x, fh_y, cut_z))
                     )
                 elif shape == 'filleted_rectangle':
                     w = fh.width_mm if fh.width_mm else fh.radius_mm * 2
                     h = fh.height_mm if fh.height_mm else fh.radius_mm * 2
                     cutter = _make_filleted_rectangle_cutter(
-                        w, h, pocket_depth, wall_top_z, rotation, fh_x, fh_y
+                        w, h, pocket_depth, wall_top_z, -rotation, fh_x, fh_y
                     )
                 else:
                     continue
@@ -1053,6 +1070,8 @@ def _make_finger_hole_chamfers(
     cutters = []
     for poly in polygons:
         for fh in poly.finger_holes:
+            if getattr(fh, 'disabled', False):
+                continue
             fh_x = fh.x_mm + offset_x
             fh_y = -(fh.y_mm + offset_y)
             shape = getattr(fh, 'shape', 'circle')
@@ -1063,7 +1082,7 @@ def _make_finger_hole_chamfers(
             if eff_chamfer <= 0:
                 continue
             try:
-                if shape == 'circle' or shape == 'cylinder':
+                if shape in ('circle', 'cylinder', 'scoop'):
                     r = fh.radius_mm
                     cs = mf.CrossSection.circle(r, circular_segments=ROUND_SEGS)
                     cs_outer = cs.offset(eff_chamfer, mf.JoinType.Round)
@@ -1071,14 +1090,14 @@ def _make_finger_hole_chamfers(
                     size = fh.radius_mm * 2
                     cs = mf.CrossSection.square((size, size), center=True)
                     if rotation:
-                        cs = cs.rotate(rotation)
+                        cs = cs.rotate(-rotation)
                     cs_outer = cs.offset(eff_chamfer, mf.JoinType.Round)
                 elif shape == 'rectangle' or shape == 'filleted_rectangle':
                     w = fh.width_mm if fh.width_mm else fh.radius_mm * 2
                     h = fh.height_mm if fh.height_mm else fh.radius_mm * 2
                     cs = mf.CrossSection.square((w, h), center=True)
                     if rotation:
-                        cs = cs.rotate(rotation)
+                        cs = cs.rotate(-rotation)
                     cs_outer = cs.offset(eff_chamfer, mf.JoinType.Round)
                 else:
                     continue
