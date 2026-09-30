@@ -193,21 +193,23 @@ async def trace_region(
     h, w = img.shape[:2]
     x, y, rw, rh = _clamp_rect(rect, w, h)
 
-    full = np.zeros((h, w), np.uint8)
     # ignore specks, but never demand more than a quarter of a small box
     min_area = max(min(100, rw * rh // 4), int(rw * rh * 0.01))
+
+    def outlines(crop_mask: np.ndarray):
+        full = np.zeros((h, w), np.uint8)
+        full[y:y + rh, x:x + rw] = crop_mask
+        return contours_from_binary(full, w, h, min_area=min_area)
+
+    contours = []
     if saliency is not None:
         try:
-            crop_mask = await saliency(img[y:y + rh, x:x + rw])
+            contours = outlines(await saliency(img[y:y + rh, x:x + rw]))
         except Exception:
             logger.warning("saliency failed on region; falling back to GrabCut", exc_info=True)
-            crop_mask = None
-        if crop_mask is not None and int(np.count_nonzero(crop_mask)) >= min_area:
-            full[y:y + rh, x:x + rw] = crop_mask
-    if not full.any():
-        full[y:y + rh, x:x + rw] = grabcut_mask(img, (x, y, rw, rh))[y:y + rh, x:x + rw]
-
-    contours = contours_from_binary(full, w, h, min_area=min_area)
+    # also covers a model that found only specks too small to outline
+    if not contours:
+        contours = outlines(grabcut_mask(img, (x, y, rw, rh))[y:y + rh, x:x + rw])
     if not contours:
         raise OutlineOpError("no object found in that box; try drawing the outline by hand")
     exterior, holes = max(contours, key=lambda c: ShapelyPolygon(c[0]).area)

@@ -306,3 +306,14 @@ def test_trace_region_route_falls_back_when_the_tracer_cannot_load(tmp_path, mon
     assert resp.status_code == 200
     xs = [p["x"] for p in resp.json()["polygons"][0]["points"]]
     assert min(xs) == pytest.approx(50, abs=3)
+
+
+def test_trace_region_falls_back_when_saliency_finds_only_specks(tmp_path):
+    async def saliency(crop):
+        # plenty of foreground pixels, but no blob big enough to outline
+        mask = np.zeros(crop.shape[:2], np.uint8)
+        mask[::8, ::8] = 255
+        return mask
+
+    poly = asyncio.run(trace_region(_photo(tmp_path), (35, 35, 90, 70), "t", saliency))
+    assert to_shapely(poly).bounds == pytest.approx((50, 50, 109, 89), abs=3)
