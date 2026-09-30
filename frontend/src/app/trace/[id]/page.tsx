@@ -9,10 +9,11 @@ import { PaperCornerEditor } from '@/components/PaperCornerEditor'
 import { PolygonEditor } from '@/components/PolygonEditor'
 import { SessionInfo } from '@/components/SessionInfo'
 import { Alert } from '@/components/Alert'
-import { getSession, setCorners, traceTools, updatePolygons, updateSession, getImageUrl, getAvailableKeys, traceFromMask, saveToolsFromSession } from '@/lib/api'
+import { getSession, setCorners, traceTools, updatePolygons, updateSession, getImageUrl, getAvailableKeys, traceFromMask, saveToolsFromSession, splitPolygon, mergePolygons, traceRegion } from '@/lib/api'
 import { CornersHint, TraceHint, EditHint } from '@/components/OnboardingIllustrations'
 import { PhotoWarningsBanner } from '@/components/PhotoWarningsBanner'
 import { StepBar } from '@/components/StepBar'
+import { createTraceGeneration } from '@/lib/outlineEdit'
 import type { PaperSize, PhotoWarning, Point, Polygon, Session } from '@/types'
 
 type Step = 'corners' | 'trace' | 'edit'
@@ -90,6 +91,7 @@ export default function TracePage() {
   const maskInputRef = useRef<HTMLInputElement>(null)
   const statusInterval = useRef<NodeJS.Timeout | null>(null)
   const polygonsDirtyRef = useRef(false)
+  const [traceGeneration] = useState(createTraceGeneration)
 
   useEffect(() => {
     if (!methodOpen) return
@@ -166,6 +168,7 @@ export default function TracePage() {
 
   async function handleCornersSubmit() {
     if (corners.length !== 4) return
+    traceGeneration.bump()
 
     setProcessing(true)
     setError(null)
@@ -218,6 +221,7 @@ export default function TracePage() {
   }
 
   async function handleTrace(tracerId?: string) {
+    traceGeneration.bump()
     const tid = tracerId || selectedTracer
     if (tid === 'gemini' && !hasEnvKey && !apiKey.trim()) {
       setError('please enter your API key')
@@ -261,6 +265,7 @@ export default function TracePage() {
   }
 
   async function handleMaskUpload(file: File) {
+    traceGeneration.bump()
     setProcessing(true)
     setError(null)
 
@@ -313,6 +318,17 @@ export default function TracePage() {
       poly.id === polygonId ? { ...poly, label } : poly
     )))
   }, [markPolygonsDirty])
+
+  const handleSplit = useCallback(
+    (polygon: Polygon, cut: Point[], labelStart: number) => splitPolygon(sessionId, polygon, cut, labelStart),
+    [sessionId],
+  )
+  const handleMerge = useCallback((selected: Polygon[]) => mergePolygons(sessionId, selected), [sessionId])
+  const handleTraceRegion = useCallback(
+    (rect: { x: number; y: number; width: number; height: number }, labelStart: number) =>
+      traceGeneration.guard(() => traceRegion(sessionId, rect, labelStart, selectedTracer ?? undefined)),
+    [sessionId, selectedTracer, traceGeneration],
+  )
 
   useDebouncedSave(
     async () => {
@@ -574,7 +590,7 @@ export default function TracePage() {
               <EditHint />
               <p className="text-xs text-text-muted">
                 {polygons.length === 0
-                  ? 'No tools were detected.'
+                  ? 'No tools were detected. Box or draw them on the photo.'
                   : includedPolygons.size === 0
                     ? 'Click outlines to select which tools to save.'
                     : `${includedPolygons.size} of ${polygons.length} selected. Click to add or remove.`}
@@ -722,9 +738,10 @@ export default function TracePage() {
               </button>
               <button
                 onClick={() => setStep('trace')}
+                title="Run the tracer on the whole photo again. This replaces every outline; to add one missed object, use the box or pen tool above the photo."
                 className="btn-secondary w-full py-1.5 text-sm inline-flex items-center justify-center"
               >
-                Re-trace
+                Re-trace all
               </button>
             </>
           )}
@@ -752,6 +769,10 @@ export default function TracePage() {
             onIncludedChange={step === 'edit' ? setIncludedPolygons : undefined}
             hovered={step === 'edit' ? hoveredPolygon : undefined}
             onHoveredChange={step === 'edit' ? setHoveredPolygon : undefined}
+            showLabels={step === 'edit'}
+            onSplit={handleSplit}
+            onMerge={handleMerge}
+            onTraceRegion={handleTraceRegion}
           />
         )}
       </div>

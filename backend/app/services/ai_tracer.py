@@ -146,6 +146,108 @@ def _touched_edges(mask: np.ndarray, band: int = 3, min_px: int = 10) -> dict[st
     }
 
 
+def contours_from_binary(
+    thresh: np.ndarray,
+    target_w: int,
+    target_h: int,
+    min_area: int = 5000,
+) -> list[tuple[list[tuple[float, float]], list[list[tuple[float, float]]]]]:
+    """trace a foreground mask (fg=255) into (exterior, [holes]) outlines in
+    image pixels, clamped to the image bounds."""
+    from shapely.geometry import Polygon as ShapelyPolygon
+    from shapely.ops import unary_union
+
+    kernel = np.ones((3, 3), np.uint8)
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
+
+    mask_contours, hierarchy = cv2.findContours(thresh, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+    if not mask_contours or hierarchy is None:
+        return []
+
+    hierarchy = hierarchy[0]  # shape: (N, 4) — [next, prev, child, parent]
+
+    # build parent->children mapping from hierarchy
+    parent_children: dict[int, list[int]] = {}
+    for i, h in enumerate(hierarchy):
+        parent_idx = h[3]
+        if parent_idx == -1:
+            # top-level contour
+            if i not in parent_children:
+                parent_children[i] = []
+        else:
+            parent_children.setdefault(parent_idx, []).append(i)
+
+    shapely_polys = []
+    for parent_idx, child_indices in parent_children.items():
+        if hierarchy[parent_idx][3] != -1:
+            # not a top-level contour, skip
+            continue
+
+        contour = mask_contours[parent_idx]
+        area = cv2.contourArea(contour)
+        if area < min_area:
+            continue
+
+        exterior_pts = [(float(p[0][0]), float(p[0][1])) for p in contour]
+        if len(exterior_pts) < 4:
+            continue
+
+        # collect hole contours
+        holes = []
+        for ci in child_indices:
+            hole_contour = mask_contours[ci]
+            hole_pts = [(float(p[0][0]), float(p[0][1])) for p in hole_contour]
+            if len(hole_pts) >= 4 and cv2.contourArea(hole_contour) >= min_area // 4:
+                holes.append(hole_pts)
+
+        try:
+            poly = ShapelyPolygon(exterior_pts, holes=holes)
+            if not poly.is_valid:
+                poly = poly.buffer(0)
+            if poly.area > min_area:
+                shapely_polys.append(poly)
+        except Exception:
+            continue
+
+    if not shapely_polys:
+        return []
+
+    merged = unary_union(shapely_polys)
+
+    results = []
+    polys_to_process = []
+    if merged.geom_type == "Polygon":
+        polys_to_process = [merged]
+    elif merged.geom_type == "MultiPolygon":
+        polys_to_process = list(merged.geoms)
+
+    for poly in polys_to_process:
+        if poly.area < min_area:
+            continue
+        simplified = poly.simplify(1.0, preserve_topology=True)
+        coords = list(simplified.exterior.coords)[:-1]
+        if len(coords) < 4:
+            continue
+        clamped = [
+            (max(0, min(target_w, x)), max(0, min(target_h, y)))
+            for x, y in coords
+        ]
+        # extract interior rings (holes)
+        hole_rings = []
+        for interior in simplified.interiors:
+            hole_coords = list(interior.coords)[:-1]
+            if len(hole_coords) >= 3:
+                hole_clamped = [
+                    (max(0, min(target_w, x)), max(0, min(target_h, y)))
+                    for x, y in hole_coords
+                ]
+                hole_rings.append(hole_clamped)
+        results.append((clamped, hole_rings))
+
+    return results
+
+
 class AITracer:
     def __init__(
         self,
@@ -575,9 +677,6 @@ class AITracer:
         align: bool = False,
     ) -> list[tuple[list[tuple[float, float]], list[list[tuple[float, float]]]]]:
         """trace contours from mask image. returns list of (exterior, [holes])."""
-        from shapely.geometry import Polygon as ShapelyPolygon
-        from shapely.ops import unary_union
-
         img = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
         if img is None:
             return []
@@ -618,95 +717,7 @@ class AITracer:
         if align:
             thresh = self._align_mask(thresh, original)
 
-        kernel = np.ones((3, 3), np.uint8)
-        thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
-        thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
-
-        mask_contours, hierarchy = cv2.findContours(thresh, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-        if not mask_contours or hierarchy is None:
-            return []
-
-        hierarchy = hierarchy[0]  # shape: (N, 4) — [next, prev, child, parent]
-
-        # build parent->children mapping from hierarchy
-        parent_children: dict[int, list[int]] = {}
-        for i, h in enumerate(hierarchy):
-            parent_idx = h[3]
-            if parent_idx == -1:
-                # top-level contour
-                if i not in parent_children:
-                    parent_children[i] = []
-            else:
-                parent_children.setdefault(parent_idx, []).append(i)
-
-        shapely_polys = []
-        for parent_idx, child_indices in parent_children.items():
-            if hierarchy[parent_idx][3] != -1:
-                # not a top-level contour, skip
-                continue
-
-            contour = mask_contours[parent_idx]
-            area = cv2.contourArea(contour)
-            if area < min_area:
-                continue
-
-            exterior_pts = [(float(p[0][0]), float(p[0][1])) for p in contour]
-            if len(exterior_pts) < 4:
-                continue
-
-            # collect hole contours
-            holes = []
-            for ci in child_indices:
-                hole_contour = mask_contours[ci]
-                hole_pts = [(float(p[0][0]), float(p[0][1])) for p in hole_contour]
-                if len(hole_pts) >= 4 and cv2.contourArea(hole_contour) >= min_area // 4:
-                    holes.append(hole_pts)
-
-            try:
-                poly = ShapelyPolygon(exterior_pts, holes=holes)
-                if not poly.is_valid:
-                    poly = poly.buffer(0)
-                if poly.area > min_area:
-                    shapely_polys.append(poly)
-            except Exception:
-                continue
-
-        if not shapely_polys:
-            return []
-
-        merged = unary_union(shapely_polys)
-
-        results = []
-        polys_to_process = []
-        if merged.geom_type == "Polygon":
-            polys_to_process = [merged]
-        elif merged.geom_type == "MultiPolygon":
-            polys_to_process = list(merged.geoms)
-
-        for poly in polys_to_process:
-            if poly.area < min_area:
-                continue
-            simplified = poly.simplify(1.0, preserve_topology=True)
-            coords = list(simplified.exterior.coords)[:-1]
-            if len(coords) < 4:
-                continue
-            clamped = [
-                (max(0, min(target_w, x)), max(0, min(target_h, y)))
-                for x, y in coords
-            ]
-            # extract interior rings (holes)
-            hole_rings = []
-            for interior in simplified.interiors:
-                hole_coords = list(interior.coords)[:-1]
-                if len(hole_coords) >= 3:
-                    hole_clamped = [
-                        (max(0, min(target_w, x)), max(0, min(target_h, y)))
-                        for x, y in hole_coords
-                    ]
-                    hole_rings.append(hole_clamped)
-            results.append((clamped, hole_rings))
-
-        return results
+        return contours_from_binary(thresh, target_w, target_h, min_area)
 
     @staticmethod
     def _align_mask(thresh: np.ndarray, original: np.ndarray) -> np.ndarray:

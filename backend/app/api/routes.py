@@ -47,6 +47,7 @@ from app.models.schemas import (
     FingerHole,
     GenerateRequest,
     GenerateResponse,
+    MergePolygonsRequest,
     PhotoStation,
     PhotoStationCreateRequest,
     PhotoStationListResponse,
@@ -57,6 +58,7 @@ from app.models.schemas import (
     Point,
     Polygon,
     PolygonsRequest,
+    PolygonsResponse,
     ProjectHealthResponse,
     ProjectSketch,
     ProjectSketchCreateRequest,
@@ -70,12 +72,14 @@ from app.models.schemas import (
     SessionListResponse,
     SessionSummary,
     SessionUpdateRequest,
+    SplitPolygonRequest,
     StatusResponse,
     Tool,
     ToolDetailResponse,
     ToolListResponse,
     ToolSummary,
     ToolUpdateRequest,
+    TraceRegionRequest,
     TraceRequest,
     TraceResponse,
     UploadResponse,
@@ -87,6 +91,7 @@ from app.services.geometry import optimal_rotation_angle as _optimal_rotation_an
 from app.services.image_ingest import ImageTooLargeError, ingest_image
 from app.services.image_processor import ImageProcessor
 from app.services.image_service import generate_tool_thumbnail
+from app.services.outline_ops import OutlineOpError, merge_polygons, split_polygon, trace_region
 from app.services.photo_checks import check_photo, extract_focal_length_35mm
 from app.services.photo_station_store import PhotoStationStore
 from app.services.polygon_scaler import PolygonScaler, ScaledFingerHole, ScaledPolygon
@@ -109,7 +114,7 @@ from app.services.project_store import ProjectStore
 from app.services.session_store import SessionStore
 from app.services.stl_generator_manifold import STL_GEOMETRY_VERSION, ManifoldSTLGenerator
 from app.services.store_errors import StoreClosedError
-from app.services.tool_namer import name_polygons
+from app.services.tool_namer import fallback_label, name_polygons
 from app.services.tool_store import ToolStore
 from app.services.tracer_registry import TRACER_LABELS, tracer_kind, validate_tracer_ids
 
@@ -1282,6 +1287,84 @@ async def trace_from_mask(
         polygons=polygons,
         mask_url=f"/storage/{user_id}/processed/{session_id}_mask.png",
     )
+
+
+def _session_with_image(user_id: str, session_id: str) -> Session:
+    user_sessions, _, _ = get_stores(user_id)
+    session = user_sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="session not found")
+    if not session.corrected_image_path:
+        raise HTTPException(status_code=400, detail="must set corners first")
+    return session
+
+
+async def _name_new_polygons(session: Session, polygons: list[Polygon]) -> list[Polygon]:
+    return await name_polygons(_abs(session.corrected_image_path), polygons)
+
+
+@router.post("/sessions/{session_id}/polygons/split", response_model=PolygonsResponse)
+async def split_session_polygon(request: Request, session_id: str, req: SplitPolygonRequest, user_id: str = Depends(get_user_id)):
+    """cut one outline along a stroke. returns the pieces; the editor saves them."""
+    session = _session_with_image(user_id, session_id)
+    try:
+        pieces = split_polygon(req.polygon, req.cut, lambda n: fallback_label(req.label_start - 1 + n))
+    except OutlineOpError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    kept, new = pieces[0], pieces[1:]
+    return PolygonsResponse(polygons=[kept, *await _name_new_polygons(session, new)])
+
+
+@router.post("/sessions/{session_id}/polygons/merge", response_model=PolygonsResponse)
+async def merge_session_polygons(request: Request, session_id: str, req: MergePolygonsRequest, user_id: str = Depends(get_user_id)):
+    """join outlines into the first one. returns the merged outline."""
+    _session_with_image(user_id, session_id)
+    try:
+        merged = merge_polygons(req.polygons)
+    except OutlineOpError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return PolygonsResponse(polygons=[merged])
+
+
+def _region_saliency(tracer_id: str | None):
+    """the configured saliency model as a crop -> mask function, or None when
+    the tracer has no local/remote saliency model (gemini) or no token."""
+    if os.environ.get("E2E_TEST_MODE"):
+        return None
+    tid = tracer_id or settings.available_tracers[0]
+    if tid not in settings.available_tracers or tracer_kind(tid) == "gemini":
+        return None
+    if tracer_kind(tid) == "remote" and not _remote_token(tid):
+        return None
+    try:
+        tracer = _get_tracer(tid)
+    except Exception:
+        # e.g. a local model on a CPU without AVX; GrabCut still works
+        logging.warning("tracer %s unavailable for region trace; using GrabCut", tid, exc_info=True)
+        return None
+
+    async def saliency(crop_bgr):
+        return await tracer._saliency_on_image(Image.fromarray(crop_bgr[:, :, ::-1].copy()))
+
+    return saliency
+
+
+@router.post("/sessions/{session_id}/trace-region", response_model=PolygonsResponse)
+async def trace_session_region(request: Request, session_id: str, req: TraceRegionRequest, user_id: str = Depends(get_user_id)):
+    """trace one object inside a box the user drew, for objects the full trace missed."""
+    session = _session_with_image(user_id, session_id)
+
+    saliency = _region_saliency(req.tracer)
+    try:
+        polygon = await trace_region(
+            _abs(session.corrected_image_path),
+            (req.x, req.y, req.width, req.height),
+            fallback_label(req.label_start - 1),
+            saliency,
+        )
+    except OutlineOpError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return PolygonsResponse(polygons=await _name_new_polygons(session, [polygon]))
 
 
 @router.put("/sessions/{session_id}/polygons", response_model=StatusResponse)
