@@ -59,12 +59,17 @@ administrator session keeps all of it. See [auth.md](auth.md).
 - `POST /api/sessions/{id}/trace` - AI trace tool outlines
 - `POST /api/sessions/{id}/trace-mask` - trace from uploaded mask
 - `PUT /api/sessions/{id}/polygons` - save polygon edits
+- `POST /api/sessions/{id}/trace-region` - trace one object inside a box (`x`, `y`, `width`, `height` in corrected-image pixels); uses the tracer's saliency model on the crop, falling back to OpenCV GrabCut
+- `POST /api/sessions/{id}/polygons/split` - cut one polygon along a stroke (`cut` points); the largest piece keeps the original id and label
+- `POST /api/sessions/{id}/polygons/merge` - union polygons into the first, bridging small gaps
 - `POST /api/sessions/{id}/generate` - generate STL/3MF from traced polygons
 - `POST /api/sessions/{id}/save-tools` - convert traced polygons to library tools
 - `GET /api/sessions` - list sessions
 - `GET /api/sessions/{id}` - get session state
 - `PATCH /api/sessions/{id}` - update session metadata
 - `DELETE /api/sessions/{id}` - delete session
+
+The region-trace, split, and merge endpoints return new polygons without saving them; the editor applies them through its undo history and saves with `PUT /polygons`. New outlines from region trace and split get `tool N` labels from `label_start` and go through optional naming.
 
 Trace and mask-trace responses include the final visible `Polygon.label` values for the trace result. When `TOOL_LABEL_PROVIDER=ollama`, the backend attempts optional naming before persisting the session; naming failures keep the generic `tool N` labels.
 

@@ -239,6 +239,41 @@ export async function traceFromMask(
   return fetchForm(`/api/sessions/${sessionId}/trace-mask`, formData)
 }
 
+// outline edits: the backend returns new polygons and the editor saves them
+export async function splitPolygon(
+  sessionId: string,
+  polygon: Polygon,
+  cut: Point[],
+  labelStart: number,
+): Promise<Polygon[]> {
+  const res = await fetchApi<{ polygons: Polygon[] }>(`/api/sessions/${sessionId}/polygons/split`, {
+    method: 'POST',
+    body: JSON.stringify({ polygon, cut, label_start: labelStart }),
+  })
+  return res.polygons
+}
+
+export async function mergePolygons(sessionId: string, polygons: Polygon[]): Promise<Polygon> {
+  const res = await fetchApi<{ polygons: Polygon[] }>(`/api/sessions/${sessionId}/polygons/merge`, {
+    method: 'POST',
+    body: JSON.stringify({ polygons }),
+  })
+  return res.polygons[0]
+}
+
+export async function traceRegion(
+  sessionId: string,
+  rect: { x: number; y: number; width: number; height: number },
+  labelStart: number,
+  tracer?: string,
+): Promise<Polygon> {
+  const res = await fetchApi<{ polygons: Polygon[] }>(`/api/sessions/${sessionId}/trace-region`, {
+    method: 'POST',
+    body: JSON.stringify({ ...rect, tracer, label_start: labelStart }),
+  })
+  return res.polygons[0]
+}
+
 // backwards compat
 export async function renameSession(sessionId: string, name: string): Promise<void> {
   await updateSession(sessionId, { name })

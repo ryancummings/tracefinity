@@ -135,6 +135,37 @@ class PolygonsRequest(BaseModel):
     polygons: list[Polygon]
 
 
+class SplitPolygonRequest(BaseModel):
+    polygon: Polygon
+    cut: list[Point] = Field(min_length=2, max_length=5000)
+    # number used for the first new piece's fallback "tool N" label
+    label_start: int = Field(default=1, ge=1)
+
+
+class MergePolygonsRequest(BaseModel):
+    polygons: list[Polygon] = Field(min_length=2, max_length=50)
+
+
+class TraceRegionRequest(BaseModel):
+    x: float
+    y: float
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+    tracer: str | None = None
+    label_start: int = Field(default=1, ge=1)
+
+    @field_validator("x", "y", "width", "height")
+    @classmethod
+    def validate_finite(cls, v: float) -> float:
+        if not math.isfinite(v):
+            raise ValueError("region value must be finite")
+        return v
+
+
+class PolygonsResponse(BaseModel):
+    polygons: list[Polygon]
+
+
 class BinParams(BaseModel):
     grid_x: float = 2
     grid_y: float = 2

@@ -47,6 +47,8 @@ mesh booleans were measured at 10-100x faster for this workload. See
 - Config is spread into the API request body: `{ ...config, polygons }` in `generateStl`
 - Text labels live on BinConfig (not Polygon) since they're free-placed
 - PolygonEditor uses refs (`polygonsRef`, `onPolygonsChangeRef`) to avoid stale closures during drag -- do not add `polygons` or `onPolygonsChange` to the `handleMouseMove` dependency array
+- PolygonEditor's split, merge, and box-trace results arrive after an await. Apply them to `polygonsRef.current` through `updatePolygonsRef`, not the render-time `polygons`, or an edit made while the request was in flight is lost
+- PolygonEditor undo restores outlines but keeps each surviving tool's current name (`keepCurrentLabels`). Renames happen in the sidebar outside the editor's history; without this, undoing a later edit would silently revert a name
 - Auto-save uses the `useDebouncedSave` hook (debounce + `beforeunload` flush). Pass `skipInitial: true` to avoid saving on first load.
 - Undo/redo uses the `useHistory` hook (deep-clone, Cmd+Z handling). The `set()` method pushes to history; `undo()`/`redo()` call the `onChange` callback.
 - ToolEditor and BinEditor are split into orchestrator + toolbar + canvas sub-components. `CutoutOverlay` renders finger holes in both.

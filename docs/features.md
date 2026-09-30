@@ -23,6 +23,13 @@ Reference for AI agents. Check here before suggesting new features or claiming s
 ## Polygon Editing
 
 - Vertex add/remove/drag
+- Straighten: click two corners to replace the wobbly trace between them with one straight edge (Shift takes the other way round; carries on from the last corner)
+- Tool names shown on the photo during tracing; click a name to rename it in place
+- Split an outline by dragging a cut across it (Shift for a straight cut)
+- Merge outlines by clicking them in turn (small gaps are bridged)
+- Draw a missing outline by hand (Enter or click the first point to finish; Shift snaps to 45 degrees; Backspace removes the last point)
+- Box trace: drag a box around an object the tracer missed to trace just that object
+- Re-trace all re-runs the tracer on the whole photo and replaces every outline
 - Grid snap (5mm increments, toggle on/off)
 - Smoothing toggle (accurate vs smooth) with smoothness slider
 - 90-degree rotation (clockwise/counter-clockwise)

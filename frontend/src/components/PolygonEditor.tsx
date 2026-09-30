@@ -2,8 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { Point, Polygon } from '@/types'
-import { Undo2, Redo2, Trash2, Plus, Minus, Move } from 'lucide-react'
+import { Undo2, Redo2, Trash2, Plus, Minus, Move, Slash, Scissors, Combine, PenTool, SquareDashedMousePointer, Loader2 } from 'lucide-react'
 import { polygonPathData } from '@/lib/svg'
+import { keepCurrentLabels, nextToolNumber, snapAngle, straighten, straightenRemoval } from '@/lib/outlineEdit'
+import { OutlineLabels } from '@/components/OutlineLabels'
 import { useHistory } from '@/hooks/useHistory'
 import { useDeleteShortcut } from '@/hooks/useDeleteShortcut'
 import { ZOOM_FACTOR } from '@/lib/constants'
@@ -18,11 +20,51 @@ interface Props {
   onIncludedChange?: (ids: Set<string>) => void
   hovered?: string | null
   onHoveredChange?: (id: string | null) => void
+  // shows each tool's name on the canvas, renamable in place
+  showLabels?: boolean
+  // outline operations the host resolves (the trace page calls the backend)
+  onSplit?: (polygon: Polygon, cut: Point[], labelStart: number) => Promise<Polygon[]>
+  onMerge?: (polygons: Polygon[]) => Promise<Polygon>
+  onTraceRegion?: (rect: { x: number; y: number; width: number; height: number }, labelStart: number) => Promise<Polygon>
 }
 // dark halo painted under outlines so they stay legible over photographs
 const HALO_STROKE = 'rgba(2, 6, 23, 0.55)'
 
-type EditMode = 'select' | 'vertex' | 'add-vertex' | 'delete-vertex'
+type EditMode = 'select' | 'vertex' | 'add-vertex' | 'delete-vertex' | 'straighten' | 'split' | 'merge' | 'draw' | 'box'
+// in-progress multi-step input for the outline tools
+type Gesture =
+  | { kind: 'straighten'; polyId: string; start: number; hover: number | null }
+  | { kind: 'stroke'; points: Point[] }
+  | { kind: 'box'; start: Point; end: Point }
+  | { kind: 'draw'; points: Point[]; hover: Point | null }
+  | { kind: 'merge'; sourceId: string }
+  | null
+
+// modes where an overlay captures pointer input instead of the outlines
+const CANVAS_MODES: EditMode[] = ['split', 'draw', 'box']
+const VERTEX_MODES: EditMode[] = ['vertex', 'select', 'add-vertex', 'delete-vertex', 'straighten']
+
+const MODE_HINTS: Record<EditMode, string> = {
+  select: '',
+  vertex: '',
+  'add-vertex': 'Click on an edge to add a vertex',
+  'delete-vertex': 'Click a vertex to remove it',
+  straighten: 'Click two corners to make the edge between them straight. Shift takes the other way round',
+  split: 'Drag a line across an outline to cut it in two. Hold Shift for a straight cut',
+  merge: 'Click the outlines to join, one after another',
+  draw: 'Click around the object. Click the first point or press Enter to finish; Shift snaps to 45°',
+  box: 'Drag a box around a missed object to trace it',
+}
+
+function newPolygonId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `poly-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
+
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback
+}
 type DragState =
   | { type: 'vertex'; polyId: string; pointIdx: number }
   | { type: 'pan'; startClientX: number; startClientY: number; origPanX: number; origPanY: number; svgScale: number }
@@ -37,6 +79,10 @@ export function PolygonEditor({
   onIncludedChange,
   hovered,
   onHoveredChange,
+  showLabels = false,
+  onSplit,
+  onMerge,
+  onTraceRegion,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -67,10 +113,16 @@ export function PolygonEditor({
 
   const [editMode, setEditMode] = useState<EditMode>('select')
   const [dragging, setDragging] = useState<DragState>(null)
+  const [gesture, setGesture] = useState<Gesture>(null)
+  const [shiftHeld, setShiftHeld] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
+  // undo and redo restore outlines but keep today's names, so renaming in
+  // the sidebar or on the canvas is never lost to undoing a later edit
   const { set: pushHistory, undo: handleUndo, redo: handleRedo, canUndo, canRedo } = useHistory<Polygon[]>(
     polygons,
-    onPolygonsChange
+    restored => onPolygonsChange(keepCurrentLabels(restored, polygonsRef.current))
   )
 
   useEffect(() => {
@@ -157,11 +209,13 @@ export function PolygonEditor({
       if (e.code === 'Space' && !e.repeat) {
         spaceHeld.current = true
       }
+      if (e.key === 'Shift') setShiftHeld(true)
     }
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         spaceHeld.current = false
       }
+      if (e.key === 'Shift') setShiftHeld(false)
     }
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
@@ -190,7 +244,9 @@ export function PolygonEditor({
     if (consumeDidPan()) return
     if (!editable) return
 
-    if (editMode !== 'select') {
+    if (editMode === 'merge') {
+      handleMergeClick(id)
+    } else if (editMode !== 'select') {
       // in editing modes, set active for vertex editing
       setActiveId(activeId === id ? null : id)
     } else if (hasInclusion && onIncludedChange) {
@@ -232,7 +288,9 @@ export function PolygonEditor({
     if (consumeDidPan()) return
     if (!editable) return
 
-    if (editMode === 'delete-vertex') {
+    if (editMode === 'straighten') {
+      handleStraightenClick(polyId, pointIdx)
+    } else if (editMode === 'delete-vertex') {
       const poly = polygons.find(p => p.id === polyId)
       if (!poly || poly.points.length <= 3) return // need at least 3 points
 
@@ -368,6 +426,13 @@ export function PolygonEditor({
     setPan({ x: 0, y: 0 })
   }
 
+  // names sit outside undo history; see the history setup above
+  const handleRename = (id: string, label: string) => {
+    const poly = polygons.find(p => p.id === id)
+    if (!poly || poly.label === label) return
+    onPolygonsChange(polygons.map(p => (p.id === id ? { ...p, label } : p)))
+  }
+
   const handleDeletePolygon = (id: string) => {
     updatePolygons(polygons.filter((p) => p.id !== id))
     if (activeId === id) setActiveId(null)
@@ -378,12 +443,267 @@ export function PolygonEditor({
     }
   }
 
+  // --- outline tools ---
+
+  const gestureRef = useRef(gesture)
+  const busyRef = useRef(false)
+  const includedRef = useRef(included)
+  const onIncludedChangeRef = useRef(onIncludedChange)
+  const updatePolygonsRef = useRef(updatePolygons)
+  useEffect(() => { gestureRef.current = gesture }, [gesture])
+  useEffect(() => { includedRef.current = included }, [included])
+  useEffect(() => { onIncludedChangeRef.current = onIncludedChange }, [onIncludedChange])
+  useEffect(() => { updatePolygonsRef.current = updatePolygons }, [updatePolygons])
+
+  // new outlines join the save selection; ids read from refs because the
+  // async operations finish after the render that started them
+  const includeNew = (ids: string[]) => {
+    const current = includedRef.current
+    const change = onIncludedChangeRef.current
+    if (!current || !change || ids.length === 0) return
+    change(new Set([...current, ...ids]))
+  }
+
+  const firstFreeToolNumber = () => nextToolNumber(polygonsRef.current.map(p => p.label))
+
+  // one backend operation at a time; errors become the toolbar notice
+  const runOperation = async (fallback: string, op: () => Promise<void>) => {
+    if (busyRef.current) return
+    busyRef.current = true
+    setBusy(true)
+    setNotice(null)
+    try {
+      await op()
+    } catch (err) {
+      setNotice(errorMessage(err, fallback))
+    } finally {
+      busyRef.current = false
+      setBusy(false)
+    }
+  }
+
+  const handleStraightenClick = (polyId: string, pointIdx: number) => {
+    const poly = polygons.find(p => p.id === polyId)
+    if (!poly) return
+    if (gesture?.kind !== 'straighten' || gesture.polyId !== polyId) {
+      setGesture({ kind: 'straighten', polyId, start: pointIdx, hover: null })
+      return
+    }
+    if (gesture.start === pointIdx) {
+      setGesture(null)
+      return
+    }
+    const removed = straightenRemoval(poly.points, gesture.start, pointIdx, shiftHeld)
+    if (removed.length > 0) {
+      const points = straighten(poly.points, gesture.start, pointIdx, shiftHeld)
+      updatePolygons(polygons.map(p => (p.id === polyId ? { ...p, points } : p)))
+    }
+    // carry on from the corner just reached so a run of edges can be squared up
+    const nextStart = pointIdx - removed.filter(i => i < pointIdx).length
+    setGesture({ kind: 'straighten', polyId, start: nextStart, hover: null })
+  }
+
+  const handleMergeClick = (id: string) => {
+    if (gesture?.kind !== 'merge') {
+      setGesture({ kind: 'merge', sourceId: id })
+      return
+    }
+    if (gesture.sourceId === id) {
+      setGesture(null)
+      return
+    }
+    if (!onMerge) return
+    const sourceId = gesture.sourceId
+    void runOperation('Merge failed', async () => {
+      const source = polygonsRef.current.find(p => p.id === sourceId)
+      const target = polygonsRef.current.find(p => p.id === id)
+      if (!source || !target) return
+      const merged = await onMerge([source, target])
+      const current = polygonsRef.current
+      if (!current.some(p => p.id === sourceId) || !current.some(p => p.id === id)) return
+      updatePolygonsRef.current(current.filter(p => p.id !== id).map(p => (p.id === sourceId ? merged : p)))
+      if (includedRef.current?.has(id)) includeNew([merged.id])
+      setGesture({ kind: 'merge', sourceId: merged.id })
+    })
+  }
+
+  const runSplit = (cut: Point[]) => {
+    if (!onSplit || cut.length < 2) return
+    const xs = cut.map(p => p.x)
+    const ys = cut.map(p => p.y)
+    const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+    // only outlines whose bounds the stroke reaches; the backend decides if it truly crosses
+    const candidates = polygonsRef.current.filter(poly => {
+      const pxs = poly.points.map(p => p.x)
+      const pys = poly.points.map(p => p.y)
+      return Math.min(...pxs) <= maxX && Math.max(...pxs) >= minX && Math.min(...pys) <= maxY && Math.max(...pys) >= minY
+    })
+    if (candidates.length === 0) {
+      setNotice('Drag the cut across an outline')
+      return
+    }
+    void runOperation('Split failed', async () => {
+      let labelStart = firstFreeToolNumber()
+      let lastError: string | null = null
+      const replacements = new Map<string, Polygon[]>()
+      for (const poly of candidates) {
+        try {
+          const pieces = await onSplit(poly, cut, labelStart)
+          if (pieces.length < 2) continue
+          replacements.set(poly.id, pieces)
+          labelStart += pieces.length - 1
+        } catch (err) {
+          lastError = errorMessage(err, 'Split failed')
+        }
+      }
+      if (replacements.size === 0) {
+        setNotice(lastError ?? 'The cut must cross an outline from one side to the other')
+        return
+      }
+      // one history entry for the whole cut, applied to the latest outlines
+      updatePolygonsRef.current(polygonsRef.current.flatMap(p => replacements.get(p.id) ?? [p]))
+      const selected = includedRef.current
+      includeNew([...replacements].flatMap(([id, pieces]) => (
+        selected?.has(id) ? pieces.slice(1).map(p => p.id) : []
+      )))
+    })
+  }
+
+  const runTraceRegion = (a: Point, b: Point) => {
+    const rect = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y) }
+    if (!onTraceRegion || rect.width < uiScale * 8 || rect.height < uiScale * 8) {
+      setGesture(null)
+      return
+    }
+    void runOperation('Tracing failed', async () => {
+      const poly = await onTraceRegion(rect, firstFreeToolNumber())
+      updatePolygonsRef.current([...polygonsRef.current, poly])
+      includeNew([poly.id])
+    }).then(() => setGesture(null))
+  }
+
+  const finishDraw = (points: Point[]) => {
+    // a double-click lands the last point twice
+    const clean = points.filter((p, i) => i === 0 || Math.hypot(p.x - points[i - 1].x, p.y - points[i - 1].y) > uiScale * 2)
+    if (clean.length < 3) {
+      setNotice('An outline needs at least three points')
+      return
+    }
+    const poly: Polygon = {
+      id: newPolygonId(),
+      label: `tool ${firstFreeToolNumber()}`,
+      points: clean,
+      finger_holes: [],
+      interior_rings: [],
+    }
+    updatePolygons([...polygons, poly])
+    includeNew([poly.id])
+    setGesture(null)
+    setNotice(null)
+  }
+
+  const pointerPoint = (e: { clientX: number; clientY: number; shiftKey: boolean }, from?: Point) => {
+    const p = getScaledPoint(e.clientX, e.clientY)
+    return from && e.shiftKey ? snapAngle(from, p) : p
+  }
+
+  const handleOverlayMouseDown = (e: React.MouseEvent) => {
+    // pan triggers bubble to the canvas handler
+    if (e.button !== 0 || spaceHeld.current || busyRef.current) return
+    const p = getScaledPoint(e.clientX, e.clientY)
+    if (editMode === 'split') setGesture({ kind: 'stroke', points: [p] })
+    if (editMode === 'box') setGesture({ kind: 'box', start: p, end: p })
+  }
+
+  const handleOverlayMouseMove = (e: React.MouseEvent) => {
+    if (gesture?.kind !== 'draw') return
+    setGesture({ ...gesture, hover: pointerPoint(e, gesture.points[gesture.points.length - 1]) })
+  }
+
+  const handleOverlayClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (consumeDidPan() || editMode !== 'draw') return
+    const points = gesture?.kind === 'draw' ? gesture.points : []
+    const p = pointerPoint(e, points[points.length - 1])
+    if (points.length >= 3 && Math.hypot(p.x - points[0].x, p.y - points[0].y) < uiScale * 10) {
+      finishDraw(points)
+      return
+    }
+    setGesture({ kind: 'draw', points: [...points, p], hover: p })
+  }
+
+  const handleOverlayDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (gesture?.kind === 'draw') finishDraw(gesture.points)
+  }
+
+  // latest closures for the window listeners below
+  const gestureEndRef = useRef({ runSplit, runTraceRegion, finishDraw })
+  useEffect(() => { gestureEndRef.current = { runSplit, runTraceRegion, finishDraw } })
+
+  // stroke and box drags track the pointer past the canvas edge
+  const dragGesture = gesture?.kind === 'stroke' || gesture?.kind === 'box'
+  useEffect(() => {
+    if (!dragGesture || busy) return
+    const minStep = uiScale * 2
+    const move = (e: MouseEvent) => {
+      const p = getScaledPoint(e.clientX, e.clientY)
+      setGesture(g => {
+        if (g?.kind === 'box') return { ...g, end: p }
+        if (g?.kind !== 'stroke') return g
+        if (e.shiftKey) return { kind: 'stroke', points: [g.points[0], snapAngle(g.points[0], p)] }
+        const last = g.points[g.points.length - 1]
+        return Math.hypot(p.x - last.x, p.y - last.y) < minStep ? g : { ...g, points: [...g.points, p] }
+      })
+    }
+    const up = () => {
+      const g = gestureRef.current
+      if (g?.kind === 'stroke') {
+        setGesture(null)
+        gestureEndRef.current.runSplit(g.points)
+      } else if (g?.kind === 'box') {
+        gestureEndRef.current.runTraceRegion(g.start, g.end)
+      }
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+    return () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+  }, [dragGesture, busy, getScaledPoint, uiScale])
+
+  // Escape cancels, Enter finishes a drawing, Backspace takes back its last point
+  useEffect(() => {
+    if (!editable) return
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target instanceof Element ? e.target : null
+      if (target?.closest('input, textarea, select, [contenteditable]')) return
+      const g = gestureRef.current
+      if (!g || busyRef.current) return
+      if (e.key === 'Escape') {
+        setGesture(null)
+        setNotice(null)
+      } else if (e.key === 'Enter' && g.kind === 'draw') {
+        e.preventDefault()
+        gestureEndRef.current.finishDraw(g.points)
+      } else if (e.key === 'Backspace' && g.kind === 'draw') {
+        e.preventDefault()
+        setGesture(g.points.length > 1 ? { ...g, points: g.points.slice(0, -1) } : null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editable])
+
   useDeleteShortcut(() => { if (activeId) handleDeletePolygon(activeId) }, editable && activeId !== null)
 
   // auto-activate first included polygon when switching to edit modes
   const handleModeChange = (mode: EditMode) => {
     setEditMode(mode)
-    if ((mode === 'vertex' || mode === 'add-vertex' || mode === 'delete-vertex') && !activeId && polygons.length > 0) {
+    setGesture(null)
+    setNotice(null)
+    if ((mode === 'vertex' || mode === 'add-vertex' || mode === 'delete-vertex' || mode === 'straighten') && !activeId && polygons.length > 0) {
       const first = hasInclusion
         ? polygons.find(p => included!.has(p.id))
         : polygons[0]
@@ -397,47 +717,139 @@ export function PolygonEditor({
 
   const activePoly = polygons.find(p => p.id === activeId)
 
+  const modeButton = (
+    mode: EditMode,
+    icon: React.ReactNode,
+    title: string,
+    active = editMode === mode,
+    extra: { disabled?: boolean; 'data-delete-shortcut'?: boolean } = {},
+  ) => (
+    <button
+      onClick={() => handleModeChange(mode)}
+      aria-pressed={active}
+      aria-label={title}
+      title={title}
+      {...extra}
+      className={`p-2 rounded transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+        active ? 'bg-accent-muted text-accent' : 'hover:bg-border text-text-secondary'
+      }`}
+    >
+      {icon}
+    </button>
+  )
+
+  let modeHint = MODE_HINTS[editMode]
+  if (editMode === 'select' || editMode === 'vertex') {
+    modeHint = activeId
+      ? 'Drag vertices to adjust the outline'
+      : showLabels ? 'Click outlines to select tools; click a name to rename it' : 'Click outlines to select tools'
+  } else if (busy && editMode === 'box') {
+    modeHint = 'Tracing the boxed object...'
+  } else if (gesture?.kind === 'merge') {
+    modeHint = 'Click another outline to join it to the highlighted one. Esc to stop'
+  } else if (gesture?.kind === 'straighten') {
+    modeHint = 'Click the other corner. Shift takes the other way round; Esc to stop'
+  }
+  const canvasMode = editable && CANVAS_MODES.includes(editMode)
+
+  const toPoints = (pts: Point[]) => pts.map(p => `${p.x},${p.y}`).join(' ')
+
+  function renderStraightenPreview(points: Point[], start: number, hover: number | null) {
+    const from = points[start]
+    if (!from) return null
+    const to = hover !== null ? points[hover] : undefined
+    const removed = hover !== null ? straightenRemoval(points, start, hover, shiftHeld) : []
+    // removal runs forward from whichever endpoint precedes it
+    const path = removed.length === 0 ? [] : removed[0] === (start + 1) % points.length
+      ? [start, ...removed, hover!]
+      : [hover!, ...removed, start]
+    return (
+      <g className="pointer-events-none">
+        {path.length > 0 && (
+          <polyline
+            points={toPoints(path.map(i => points[i]))}
+            fill="none"
+            stroke="rgb(239, 68, 68)"
+            strokeWidth={uiScale * 3}
+            strokeDasharray={`${uiScale * 4} ${uiScale * 3}`}
+          />
+        )}
+        {to && (
+          <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="rgb(34, 197, 94)" strokeWidth={uiScale * 2.5} />
+        )}
+        <circle cx={from.x} cy={from.y} r={uiScale * 12} fill="none" stroke="rgb(245, 158, 11)" strokeWidth={uiScale * 2.5} />
+      </g>
+    )
+  }
+
+  function renderGesturePreview() {
+    if (gesture?.kind === 'stroke') {
+      return (
+        <polyline
+          points={toPoints(gesture.points)}
+          fill="none"
+          stroke="rgb(239, 68, 68)"
+          strokeWidth={uiScale * 2.5}
+          strokeDasharray={`${uiScale * 6} ${uiScale * 4}`}
+          className="pointer-events-none"
+        />
+      )
+    }
+    if (gesture?.kind === 'box') {
+      const { start, end } = gesture
+      return (
+        <rect
+          x={Math.min(start.x, end.x)}
+          y={Math.min(start.y, end.y)}
+          width={Math.abs(end.x - start.x)}
+          height={Math.abs(end.y - start.y)}
+          fill="rgba(90, 180, 222, 0.12)"
+          stroke="rgb(72, 168, 214)"
+          strokeWidth={uiScale * 2}
+          strokeDasharray={`${uiScale * 6} ${uiScale * 4}`}
+          className={`pointer-events-none ${busy ? 'animate-pulse' : ''}`}
+        />
+      )
+    }
+    if (gesture?.kind === 'draw') {
+      const pts = gesture.hover ? [...gesture.points, gesture.hover] : gesture.points
+      const first = gesture.points[0]
+      return (
+        <g className="pointer-events-none">
+          <polyline points={toPoints(pts)} fill="rgba(90, 180, 222, 0.12)" stroke={HALO_STROKE} strokeWidth={uiScale * 4} />
+          <polyline points={toPoints(pts)} fill="none" stroke="rgb(72, 168, 214)" strokeWidth={uiScale * 2} />
+          {gesture.points.map((p, i) => (
+            <circle key={i} cx={p.x} cy={p.y} r={uiScale * (i === 0 ? 9 : 5)} fill="#27272a" stroke="rgb(72, 168, 214)" strokeWidth={uiScale * 2} />
+          ))}
+          {first && gesture.points.length >= 3 && (
+            <circle cx={first.x} cy={first.y} r={uiScale * 13} fill="none" stroke="rgb(34, 197, 94)" strokeWidth={uiScale * 2} />
+          )}
+        </g>
+      )
+    }
+    return null
+  }
+
   return (
     <div className="flex flex-col gap-3 h-full min-h-0">
       {/* toolbar */}
       {editable && (
-        <div className="flex items-center gap-4 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 flex-shrink-0">
           <div className="flex gap-1 bg-elevated rounded-[10px] p-1 border border-border">
-            <button
-              onClick={() => handleModeChange('vertex')}
-              className={`p-2 rounded transition-colors cursor-pointer ${
-                editMode === 'vertex' || editMode === 'select'
-                  ? 'bg-accent-muted text-accent'
-                  : 'hover:bg-border text-text-secondary'
-              }`}
-              title="Move vertices"
-            >
-              <Move className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => handleModeChange('add-vertex')}
-              className={`p-2 rounded transition-colors cursor-pointer ${
-                editMode === 'add-vertex'
-                  ? 'bg-accent-muted text-accent'
-                  : 'hover:bg-border text-text-secondary'
-              }`}
-              title="Add vertex"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => handleModeChange('delete-vertex')}
-              data-delete-shortcut
-              className={`p-2 rounded transition-colors cursor-pointer ${
-                editMode === 'delete-vertex'
-                  ? 'bg-accent-muted text-accent'
-                  : 'hover:bg-border text-text-secondary'
-              }`}
-              title="Delete vertex"
-              disabled={activePoly && activePoly.points.length <= 3}
-            >
-              <Minus className="w-5 h-5" />
-            </button>
+            {modeButton('vertex', <Move className="w-5 h-5" />, 'Move vertices', editMode === 'vertex' || editMode === 'select')}
+            {modeButton('add-vertex', <Plus className="w-5 h-5" />, 'Add vertex')}
+            {modeButton('delete-vertex', <Minus className="w-5 h-5" />, 'Delete vertex', undefined, {
+              'data-delete-shortcut': true,
+              disabled: activePoly && activePoly.points.length <= 3,
+            })}
+            {modeButton('straighten', <Slash className="w-5 h-5" />, 'Straighten between two corners')}
+          </div>
+
+          <div className="flex gap-1 bg-elevated rounded-[10px] p-1 border border-border">
+            {onSplit && modeButton('split', <Scissors className="w-5 h-5" />, 'Split an outline')}
+            {onMerge && modeButton('merge', <Combine className="w-5 h-5" />, 'Merge outlines')}
+            {modeButton('draw', <PenTool className="w-5 h-5" />, 'Draw a missing outline')}
+            {onTraceRegion && modeButton('box', <SquareDashedMousePointer className="w-5 h-5" />, 'Trace a missed object')}
           </div>
 
           <div className="h-6 w-px bg-border-subtle" />
@@ -461,11 +873,9 @@ export function PolygonEditor({
             </button>
           </div>
 
-          <span className="text-sm text-text-muted">
-            {(editMode === 'select' || editMode === 'vertex') && !activeId && 'Click outlines to select tools'}
-            {(editMode === 'select' || editMode === 'vertex') && activeId && 'Drag vertices to adjust the outline'}
-            {editMode === 'add-vertex' && 'Click on an edge to add a vertex'}
-            {editMode === 'delete-vertex' && 'Click a vertex to remove it'}
+          <span className="text-sm text-text-muted inline-flex items-center gap-1.5" aria-live="polite">
+            {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+            {notice ? <span className="text-amber-500">{notice}</span> : modeHint}
           </span>
 
           {activeId && (
@@ -515,7 +925,11 @@ export function PolygonEditor({
             let fill = 'rgba(90, 180, 222, 0.08)'
             let stroke = 'rgba(90, 180, 222, 0.85)'
             let strokeW = uiScale * 1
-            if (isActive) {
+            if (gesture?.kind === 'merge' && gesture.sourceId === poly.id) {
+              fill = 'rgba(245, 158, 11, 0.25)'
+              stroke = 'rgb(245, 158, 11)'
+              strokeW = uiScale * 2
+            } else if (isActive) {
               fill = 'rgba(90, 180, 222, 0.3)'
               stroke = 'rgb(72, 168, 214)'
               strokeW = uiScale * 2
@@ -585,7 +999,7 @@ export function PolygonEditor({
                 {/* vertex handles */}
                 {isActive &&
                   editable &&
-                  (editMode === 'vertex' || editMode === 'select' || editMode === 'add-vertex' || editMode === 'delete-vertex') &&
+                  VERTEX_MODES.includes(editMode) &&
                   poly.points.map((point, idx) => (
                     <g key={idx}>
                       {/* transparent hit target -- larger for touch */}
@@ -594,7 +1008,13 @@ export function PolygonEditor({
                         cy={point.y}
                         r={uiScale * 16}
                         fill="transparent"
-                        className={editMode === 'delete-vertex' ? 'cursor-pointer touch-none' : 'cursor-move touch-none'}
+                        className={editMode === 'delete-vertex' || editMode === 'straighten' ? 'cursor-pointer touch-none' : 'cursor-move touch-none'}
+                        onMouseEnter={editMode === 'straighten' && gesture?.kind === 'straighten' && gesture.polyId === poly.id
+                          ? () => setGesture({ ...gesture, hover: idx })
+                          : undefined}
+                        onMouseLeave={editMode === 'straighten' && gesture?.kind === 'straighten'
+                          ? () => setGesture(g => (g?.kind === 'straighten' ? { ...g, hover: null } : g))
+                          : undefined}
                         onMouseDown={editMode !== 'delete-vertex' ? handleVertexMouseDown(poly.id, idx) : undefined}
                         onTouchStart={editMode !== 'delete-vertex' ? handleVertexTouchStart(poly.id, idx) : undefined}
                         onClick={handleVertexClick(poly.id, idx)}
@@ -611,10 +1031,39 @@ export function PolygonEditor({
                     </g>
                   ))}
 
+                {gesture?.kind === 'straighten' && gesture.polyId === poly.id && renderStraightenPreview(poly.points, gesture.start, gesture.hover)}
               </g>
             )
           })}
+
+          {canvasMode && (
+            <rect
+              x={0}
+              y={0}
+              width={imageSize.width}
+              height={imageSize.height}
+              fill="transparent"
+              className="cursor-crosshair"
+              onMouseDown={handleOverlayMouseDown}
+              onMouseMove={handleOverlayMouseMove}
+              onClick={handleOverlayClick}
+              onDoubleClick={handleOverlayDoubleClick}
+            />
+          )}
+          {renderGesturePreview()}
         </svg>
+
+        {showLabels && (
+          <OutlineLabels
+            polygons={polygons}
+            viewBox={vb}
+            onLabelChange={handleRename}
+            included={isIncluded}
+            hovered={hovered}
+            onHoveredChange={onHoveredChange}
+            interactive={editable && (editMode === 'select' || editMode === 'vertex') && !dragging}
+          />
+        )}
 
         {/* zoom controls */}
         <div
