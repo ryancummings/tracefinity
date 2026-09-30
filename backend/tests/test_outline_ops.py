@@ -265,3 +265,17 @@ def test_merging_split_pieces_restores_a_lean_outline():
     shape = to_shapely(merged)
     assert shape.area == pytest.approx(to_shapely(poly).area, rel=0.01)
     assert len(merged.points) <= len(poly.points) + 8
+
+
+def test_trace_region_box_covering_the_whole_image(tmp_path):
+    """GrabCut has no outside background to learn from; must still trace"""
+    poly = asyncio.run(trace_region(_photo(tmp_path), (0, 0, 240, 200), "t"))
+    assert to_shapely(poly).bounds == pytest.approx((50, 50, 109, 89), abs=4)
+
+
+def test_trace_region_smallest_accepted_box(tmp_path):
+    async def saliency(crop):
+        return np.full(crop.shape[:2], 255, np.uint8)
+
+    poly = asyncio.run(trace_region(_photo(tmp_path), (60, 60, 8, 8), "t", saliency))
+    assert to_shapely(poly).area > 0

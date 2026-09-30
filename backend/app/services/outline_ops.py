@@ -143,11 +143,16 @@ def _clamp_rect(rect: tuple[float, float, float, float], w: int, h: int) -> tupl
 
 def grabcut_mask(img: np.ndarray, rect: tuple[int, int, int, int]) -> np.ndarray:
     """foreground (255) inside rect by GrabCut, seeded with everything
-    outside the box as background."""
-    mask = np.zeros(img.shape[:2], np.uint8)
+    outside the box as background. a box touching the image edge is inset
+    by a pixel there, since GrabCut needs some background to learn from."""
+    h, w = img.shape[:2]
+    x, y, rw, rh = rect
+    x0, y0 = max(x, 1), max(y, 1)
+    x1, y1 = min(x + rw, w - 1), min(y + rh, h - 1)
+    mask = np.zeros((h, w), np.uint8)
     bgd = np.zeros((1, 65), np.float64)
     fgd = np.zeros((1, 65), np.float64)
-    cv2.grabCut(img, mask, rect, bgd, fgd, GRABCUT_ITERATIONS, cv2.GC_INIT_WITH_RECT)
+    cv2.grabCut(img, mask, (x0, y0, x1 - x0, y1 - y0), bgd, fgd, GRABCUT_ITERATIONS, cv2.GC_INIT_WITH_RECT)
     return np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
 
 
@@ -172,7 +177,8 @@ async def trace_region(
     x, y, rw, rh = _clamp_rect(rect, w, h)
 
     full = np.zeros((h, w), np.uint8)
-    min_area = max(100, int(rw * rh * 0.01))
+    # ignore specks, but never demand more than a quarter of a small box
+    min_area = max(min(100, rw * rh // 4), int(rw * rh * 0.01))
     if saliency is not None:
         try:
             crop_mask = await saliency(img[y:y + rh, x:x + rw])
