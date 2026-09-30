@@ -1336,7 +1336,12 @@ def _region_saliency(tracer_id: str | None):
         return None
     if tracer_kind(tid) == "remote" and not _remote_token(tid):
         return None
-    tracer = _get_tracer(tid)
+    try:
+        tracer = _get_tracer(tid)
+    except Exception:
+        # e.g. a local model on a CPU without AVX; GrabCut still works
+        logging.warning("tracer %s unavailable for region trace; using GrabCut", tid, exc_info=True)
+        return None
 
     async def saliency(crop_bgr):
         return await tracer._saliency_on_image(Image.fromarray(crop_bgr[:, :, ::-1].copy()))

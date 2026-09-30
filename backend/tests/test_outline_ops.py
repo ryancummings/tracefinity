@@ -291,3 +291,18 @@ def test_merge_bridges_a_gap_just_under_the_limit():
     # 108 wide -> limit 8.64 px; 8 px gap is allowed
     merged = merge_polygons([_rect("a", 0, 0, 50, 40), _rect("b", 58, 0, 108, 40)])
     assert to_shapely(merged).geom_type == "Polygon"
+
+
+def test_trace_region_route_falls_back_when_the_tracer_cannot_load(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch, tracers="isnet")
+
+    def broken(tracer_id=None):
+        raise RuntimeError("requires ONNX runtime but this CPU lacks AVX")
+
+    monkeypatch.setattr(routes, "_get_tracer", broken)
+    resp = client.post("/api/sessions/s1/trace-region", json={
+        "x": 35, "y": 35, "width": 90, "height": 70, "tracer": "isnet",
+    })
+    assert resp.status_code == 200
+    xs = [p["x"] for p in resp.json()["polygons"][0]["points"]]
+    assert min(xs) == pytest.approx(50, abs=3)

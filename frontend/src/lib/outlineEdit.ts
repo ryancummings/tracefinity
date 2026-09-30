@@ -165,3 +165,25 @@ export function applyMergeResult(current: Polygon[], source: Polygon, target: Po
     .filter(p => p.id !== target.id)
     .map(p => (p.id === source.id ? { ...merged, label: nowSource.label } : p))
 }
+
+export const STALE_TRACE_MESSAGE = 'The photo was re-traced meanwhile; box the object again'
+
+/**
+ * Counts whole-photo traces. A box trace that finishes after a newer
+ * whole-photo trace would add an outline to a set it never belonged to,
+ * so guard() rejects it instead.
+ */
+export function createTraceGeneration() {
+  let generation = 0
+  return {
+    bump() {
+      generation += 1
+    },
+    async guard<T>(run: () => Promise<T>): Promise<T> {
+      const started = generation
+      const result = await run()
+      if (generation !== started) throw new Error(STALE_TRACE_MESSAGE)
+      return result
+    },
+  }
+}

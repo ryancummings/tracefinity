@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Polygon } from '@/types'
-import { applyMergeResult, applySplitResults, keepCurrentLabels, labelAnchor, nextToolNumber, pointInRing, snapAngle, straighten, straightenRemoval } from './outlineEdit'
+import { STALE_TRACE_MESSAGE, applyMergeResult, createTraceGeneration, applySplitResults, keepCurrentLabels, labelAnchor, nextToolNumber, pointInRing, snapAngle, straighten, straightenRemoval } from './outlineEdit'
 
 // a 100x40 bar whose top edge was traced wobbly: 0 and 4 are its corners
 const wobblyBar = [
@@ -123,5 +123,21 @@ describe('applying async outline results', () => {
     const moved = { ...b, points: [...b.points] }
     expect(applyMergeResult([a, moved], a, b, outline('a'))).toBeNull()
     expect(applyMergeResult([a], a, b, outline('a'))).toBeNull()
+  })
+})
+
+describe('createTraceGeneration', () => {
+  it('passes a box trace through when nothing re-traced meanwhile', async () => {
+    const gen = createTraceGeneration()
+    await expect(gen.guard(async () => 'outline')).resolves.toBe('outline')
+  })
+
+  it('rejects a box trace that finishes after a whole-photo re-trace', async () => {
+    const gen = createTraceGeneration()
+    let finish: (v: string) => void = () => {}
+    const pending = gen.guard(() => new Promise<string>(resolve => { finish = resolve }))
+    gen.bump()
+    finish('outline')
+    await expect(pending).rejects.toThrow(STALE_TRACE_MESSAGE)
   })
 })

@@ -13,6 +13,7 @@ import { getSession, setCorners, traceTools, updatePolygons, updateSession, getI
 import { CornersHint, TraceHint, EditHint } from '@/components/OnboardingIllustrations'
 import { PhotoWarningsBanner } from '@/components/PhotoWarningsBanner'
 import { StepBar } from '@/components/StepBar'
+import { createTraceGeneration } from '@/lib/outlineEdit'
 import type { PaperSize, PhotoWarning, Point, Polygon, Session } from '@/types'
 
 type Step = 'corners' | 'trace' | 'edit'
@@ -90,6 +91,7 @@ export default function TracePage() {
   const maskInputRef = useRef<HTMLInputElement>(null)
   const statusInterval = useRef<NodeJS.Timeout | null>(null)
   const polygonsDirtyRef = useRef(false)
+  const [traceGeneration] = useState(createTraceGeneration)
 
   useEffect(() => {
     if (!methodOpen) return
@@ -166,6 +168,7 @@ export default function TracePage() {
 
   async function handleCornersSubmit() {
     if (corners.length !== 4) return
+    traceGeneration.bump()
 
     setProcessing(true)
     setError(null)
@@ -218,6 +221,7 @@ export default function TracePage() {
   }
 
   async function handleTrace(tracerId?: string) {
+    traceGeneration.bump()
     const tid = tracerId || selectedTracer
     if (tid === 'gemini' && !hasEnvKey && !apiKey.trim()) {
       setError('please enter your API key')
@@ -261,6 +265,7 @@ export default function TracePage() {
   }
 
   async function handleMaskUpload(file: File) {
+    traceGeneration.bump()
     setProcessing(true)
     setError(null)
 
@@ -321,8 +326,8 @@ export default function TracePage() {
   const handleMerge = useCallback((selected: Polygon[]) => mergePolygons(sessionId, selected), [sessionId])
   const handleTraceRegion = useCallback(
     (rect: { x: number; y: number; width: number; height: number }, labelStart: number) =>
-      traceRegion(sessionId, rect, labelStart, selectedTracer ?? undefined),
-    [sessionId, selectedTracer],
+      traceGeneration.guard(() => traceRegion(sessionId, rect, labelStart, selectedTracer ?? undefined)),
+    [sessionId, selectedTracer, traceGeneration],
   )
 
   useDebouncedSave(
