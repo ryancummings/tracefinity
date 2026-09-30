@@ -1,4 +1,4 @@
-import type { Point } from '@/types'
+import type { Point, Polygon } from '@/types'
 
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
 
@@ -120,4 +120,48 @@ export function nextToolNumber(labels: string[]): number {
 export function keepCurrentLabels<T extends { id: string; label: string }>(restored: T[], current: T[]): T[] {
   const names = new Map(current.map(p => [p.id, p.label]))
   return restored.map(p => (names.has(p.id) ? { ...p, label: names.get(p.id)! } : p))
+}
+
+// edits replace these arrays, so identity shows whether the shape changed
+function sameShape(before: Polygon, now: Polygon | undefined): now is Polygon {
+  return !!now && before.points === now.points && before.interior_rings === now.interior_rings
+    && before.finger_holes === now.finger_holes
+}
+
+/**
+ * Swap in split pieces computed from `sources`. A source edited or removed
+ * while the request ran is left alone, so the edit is not lost. The first
+ * piece keeps the source's current name in case it was renamed meanwhile.
+ */
+export function applySplitResults(
+  current: Polygon[],
+  sources: Polygon[],
+  results: Map<string, Polygon[]>,
+): { polygons: Polygon[]; applied: string[] } {
+  const byId = new Map(current.map(p => [p.id, p]))
+  const fresh = new Map<string, Polygon[]>()
+  for (const source of sources) {
+    const pieces = results.get(source.id)
+    const now = byId.get(source.id)
+    if (pieces && pieces.length > 1 && sameShape(source, now)) {
+      fresh.set(source.id, [{ ...pieces[0], label: now.label }, ...pieces.slice(1)])
+    }
+  }
+  return {
+    polygons: current.flatMap(p => fresh.get(p.id) ?? [p]),
+    applied: [...fresh.keys()],
+  }
+}
+
+/**
+ * Replace source with the merged outline and drop target, or null when
+ * either was edited or removed while the request ran.
+ */
+export function applyMergeResult(current: Polygon[], source: Polygon, target: Polygon, merged: Polygon): Polygon[] | null {
+  const nowSource = current.find(p => p.id === source.id)
+  const nowTarget = current.find(p => p.id === target.id)
+  if (!sameShape(source, nowSource) || !sameShape(target, nowTarget)) return null
+  return current
+    .filter(p => p.id !== target.id)
+    .map(p => (p.id === source.id ? { ...merged, label: nowSource.label } : p))
 }

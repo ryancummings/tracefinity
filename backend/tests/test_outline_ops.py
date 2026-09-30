@@ -279,3 +279,15 @@ def test_trace_region_smallest_accepted_box(tmp_path):
 
     poly = asyncio.run(trace_region(_photo(tmp_path), (60, 60, 8, 8), "t", saliency))
     assert to_shapely(poly).area > 0
+
+
+def test_merge_enforces_the_gap_limit_not_twice_it():
+    # 116 wide overall -> limit 9.28 px; a 16 px gap is beyond it
+    with pytest.raises(OutlineOpError, match="too far apart"):
+        merge_polygons([_rect("a", 0, 0, 50, 40), _rect("b", 66, 0, 116, 40)])
+
+
+def test_merge_bridges_a_gap_just_under_the_limit():
+    # 108 wide -> limit 8.64 px; 8 px gap is allowed
+    merged = merge_polygons([_rect("a", 0, 0, 50, 40), _rect("b", 58, 0, 108, 40)])
+    assert to_shapely(merged).geom_type == "Polygon"

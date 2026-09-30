@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { Point, Polygon } from '@/types'
 import { Undo2, Redo2, Trash2, Plus, Minus, Move, Slash, Scissors, Combine, PenTool, SquareDashedMousePointer, Loader2 } from 'lucide-react'
 import { polygonPathData } from '@/lib/svg'
-import { keepCurrentLabels, nextToolNumber, snapAngle, straighten, straightenRemoval } from '@/lib/outlineEdit'
+import { applyMergeResult, applySplitResults, keepCurrentLabels, nextToolNumber, snapAngle, straighten, straightenRemoval } from '@/lib/outlineEdit'
 import { OutlineLabels } from '@/components/OutlineLabels'
 import { useHistory } from '@/hooks/useHistory'
 import { useDeleteShortcut } from '@/hooks/useDeleteShortcut'
@@ -519,9 +519,13 @@ export function PolygonEditor({
       const target = polygonsRef.current.find(p => p.id === id)
       if (!source || !target) return
       const merged = await onMerge([source, target])
-      const current = polygonsRef.current
-      if (!current.some(p => p.id === sourceId) || !current.some(p => p.id === id)) return
-      updatePolygonsRef.current(current.filter(p => p.id !== id).map(p => (p.id === sourceId ? merged : p)))
+      const next = applyMergeResult(polygonsRef.current, source, target, merged)
+      if (!next) {
+        setNotice('An outline changed while merging; try again')
+        setGesture(null)
+        return
+      }
+      updatePolygonsRef.current(next)
       if (includedRef.current?.has(id)) includeNew([merged.id])
       setGesture({ kind: 'merge', sourceId: merged.id })
     })
@@ -561,10 +565,15 @@ export function PolygonEditor({
         return
       }
       // one history entry for the whole cut, applied to the latest outlines
-      updatePolygonsRef.current(polygonsRef.current.flatMap(p => replacements.get(p.id) ?? [p]))
+      const { polygons: next, applied } = applySplitResults(polygonsRef.current, candidates, replacements)
+      if (applied.length === 0) {
+        setNotice('The outline changed while splitting; try again')
+        return
+      }
+      updatePolygonsRef.current(next)
       const selected = includedRef.current
-      includeNew([...replacements].flatMap(([id, pieces]) => (
-        selected?.has(id) ? pieces.slice(1).map(p => p.id) : []
+      includeNew(applied.flatMap(id => (
+        selected?.has(id) ? replacements.get(id)!.slice(1).map(p => p.id) : []
       )))
     })
   }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { keepCurrentLabels, labelAnchor, nextToolNumber, pointInRing, snapAngle, straighten, straightenRemoval } from './outlineEdit'
+import type { Polygon } from '@/types'
+import { applyMergeResult, applySplitResults, keepCurrentLabels, labelAnchor, nextToolNumber, pointInRing, snapAngle, straighten, straightenRemoval } from './outlineEdit'
 
 // a 100x40 bar whose top edge was traced wobbly: 0 and 4 are its corners
 const wobblyBar = [
@@ -86,5 +87,41 @@ describe('keepCurrentLabels', () => {
       { id: 'a', label: 'pliers' },
       { id: 'b', label: 'tool 2' },
     ])
+  })
+})
+
+function outline(id: string, label = id): Polygon {
+  return { id, label, points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }], finger_holes: [], interior_rings: [] }
+}
+
+describe('applying async outline results', () => {
+  it('splits an unchanged outline and keeps a name given meanwhile', () => {
+    const a = outline('a'), b = outline('b')
+    const renamed = { ...a, label: 'pliers' }
+    const pieces = [outline('a', 'tool 1'), outline('c', 'tool 3')]
+    const { polygons, applied } = applySplitResults([renamed, b], [a], new Map([['a', pieces]]))
+    expect(applied).toEqual(['a'])
+    expect(polygons.map(p => `${p.id}:${p.label}`)).toEqual(['a:pliers', 'c:tool 3', 'b:b'])
+  })
+
+  it('leaves an outline alone if its shape was edited during the split', () => {
+    const a = outline('a')
+    const moved = { ...a, points: [{ x: 5, y: 5 }, ...a.points.slice(1)] }
+    const { polygons, applied } = applySplitResults([moved], [a], new Map([['a', [outline('a'), outline('c')]]]))
+    expect(applied).toEqual([])
+    expect(polygons).toEqual([moved])
+  })
+
+  it('merges unchanged outlines into the source', () => {
+    const a = outline('a', 'saw'), b = outline('b')
+    const merged = { ...outline('a', 'tool 1'), points: [{ x: 9, y: 9 }, { x: 10, y: 9 }, { x: 9, y: 10 }] }
+    expect(applyMergeResult([a, b], a, b, merged)).toEqual([{ ...merged, label: 'saw' }])
+  })
+
+  it('drops a merge when either outline was edited or removed meanwhile', () => {
+    const a = outline('a'), b = outline('b')
+    const moved = { ...b, points: [...b.points] }
+    expect(applyMergeResult([a, moved], a, b, outline('a'))).toBeNull()
+    expect(applyMergeResult([a], a, b, outline('a'))).toBeNull()
   })
 })

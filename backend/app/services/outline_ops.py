@@ -103,6 +103,19 @@ def split_polygon(poly: Polygon, cut: list[Point], new_label: Callable[[int], st
     return result
 
 
+def _connected_within(parts: list[ShapelyPolygon], max_gap: float) -> bool:
+    """whether every part links to the rest through gaps no wider than max_gap"""
+    reached = {0}
+    frontier = [0]
+    while frontier:
+        i = frontier.pop()
+        for j in range(len(parts)):
+            if j not in reached and parts[i].distance(parts[j]) <= max_gap:
+                reached.add(j)
+                frontier.append(j)
+    return len(reached) == len(parts)
+
+
 def merge_polygons(polys: list[Polygon]) -> Polygon:
     """union outlines into the first one. outlines that do not quite touch
     are joined by closing the gap between them, up to a limit."""
@@ -110,10 +123,14 @@ def merge_polygons(polys: list[Polygon]) -> Polygon:
         raise OutlineOpError("pick at least two outlines to merge")
     shapes = [to_shapely(p) for p in polys]
     merged = unary_union(shapes)
-    if len(_parts(merged)) > 1:
+    parts = _parts(merged)
+    if len(parts) > 1:
         minx, miny, maxx, maxy = merged.bounds
         max_gap = max(maxx - minx, maxy - miny) * MAX_MERGE_GAP_FRACTION
-        gap = 2.0
+        if not _connected_within(parts, max_gap):
+            raise OutlineOpError("those outlines are too far apart to merge")
+        # closing with radius r bridges gaps up to 2r
+        gap = 1.0
         while len(_parts(merged)) > 1 and gap <= max_gap:
             # closing: grow then shrink bridges the gap without swelling the
             # outline; mitred joins keep corners sharp instead of adding arcs
