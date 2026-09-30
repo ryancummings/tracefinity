@@ -6,6 +6,7 @@ import { Undo2, Redo2, Trash2, Plus, Minus, Move, Slash, Scissors, Combine, PenT
 import { polygonPathData } from '@/lib/svg'
 import { applyMergeResult, applySplitResults, keepCurrentLabels, nextToolNumber, snapAngle, straighten, straightenRemoval } from '@/lib/outlineEdit'
 import { OutlineLabels } from '@/components/OutlineLabels'
+import { ApiError } from '@/lib/api'
 import { useHistory } from '@/hooks/useHistory'
 import { useDeleteShortcut } from '@/hooks/useDeleteShortcut'
 import { ZOOM_FACTOR } from '@/lib/constants'
@@ -549,6 +550,7 @@ export function PolygonEditor({
     void runOperation('Split failed', async () => {
       let labelStart = firstFreeToolNumber()
       let lastError: string | null = null
+      let realError: string | null = null
       const replacements = new Map<string, Polygon[]>()
       for (const poly of candidates) {
         try {
@@ -557,11 +559,14 @@ export function PolygonEditor({
           replacements.set(poly.id, pieces)
           labelStart += pieces.length - 1
         } catch (err) {
-          lastError = errorMessage(err, 'Split failed')
+          // a 400 means the stroke only grazed this outline's bounds; worth
+          // saying only if nothing split. anything else is a real failure
+          if (err instanceof ApiError && err.status === 400) lastError ??= errorMessage(err, 'Split failed')
+          else realError ??= errorMessage(err, 'Split failed')
         }
       }
       if (replacements.size === 0) {
-        setNotice(lastError ?? 'The cut must cross an outline from one side to the other')
+        setNotice(realError ?? lastError ?? 'The cut must cross an outline from one side to the other')
         return
       }
       // one history entry for the whole cut, applied to the latest outlines
@@ -571,6 +576,7 @@ export function PolygonEditor({
         return
       }
       updatePolygonsRef.current(next)
+      if (realError) setNotice(`Some outlines were not split: ${realError}`)
       const selected = includedRef.current
       includeNew(applied.flatMap(id => (
         selected?.has(id) ? replacements.get(id)!.slice(1).map(p => p.id) : []

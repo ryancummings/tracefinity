@@ -49,6 +49,14 @@ describe('labelAnchor', () => {
     expect(pointInRing(labelAnchor(ell), ell)).toBe(true)
   })
 
+  it('stays inside a U too thin for any grid sample', () => {
+    const u = [
+      { x: 0, y: 0 }, { x: 2, y: 0 }, { x: 2, y: 98 }, { x: 98, y: 98 },
+      { x: 98, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 },
+    ]
+    expect(pointInRing(labelAnchor(u), u)).toBe(true)
+  })
+
   it('avoids a hole in the middle', () => {
     const square = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]
     const hole = [{ x: 30, y: 30 }, { x: 70, y: 30 }, { x: 70, y: 70 }, { x: 30, y: 70 }]

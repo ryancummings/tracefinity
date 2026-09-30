@@ -64,6 +64,35 @@ function distToRings(p: Point, rings: Point[][]): number {
 }
 
 /**
+ * Midpoint of the widest inside span on a few horizontal lines. Always
+ * inside, so it backs up the grid search for outlines too thin for any
+ * grid sample to land in.
+ */
+function scanlineInterior(rings: Point[][], minY: number, maxY: number, lines: number): Point | null {
+  let best: Point | null = null
+  let bestWidth = 0
+  for (let k = 0; k < lines; k++) {
+    const y = minY + ((k + 0.5) / lines) * (maxY - minY)
+    const xs: number[] = []
+    for (const ring of rings) {
+      for (let i = 0; i < ring.length; i++) {
+        const a = ring[i], b = ring[(i + 1) % ring.length]
+        if ((a.y > y) !== (b.y > y)) xs.push(a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x))
+      }
+    }
+    xs.sort((p, q) => p - q)
+    // even-odd: pairs of crossings bound the inside spans
+    for (let i = 0; i + 1 < xs.length; i += 2) {
+      if (xs[i + 1] - xs[i] > bestWidth) {
+        bestWidth = xs[i + 1] - xs[i]
+        best = { x: (xs[i] + xs[i + 1]) / 2, y }
+      }
+    }
+  }
+  return best
+}
+
+/**
  * A point well inside the outline for placing its name: the grid sample
  * furthest from any edge. The centroid can fall outside a C- or L-shaped
  * tool, which would put the name over empty paper.
@@ -76,7 +105,7 @@ export function labelAnchor(points: Point[], holes: Point[][] = [], samples = 14
     minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y)
   }
   const rings = [points, ...holes]
-  let best: Point = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
+  let best: Point = scanlineInterior(rings, minY, maxY, samples) ?? { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
   let bestDist = -1
   for (let i = 0; i < samples; i++) {
     for (let j = 0; j < samples; j++) {
