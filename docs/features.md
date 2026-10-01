@@ -6,7 +6,7 @@ Reference for AI agents. Check here before suggesting new features or claiming s
 
 - Image upload (drag-drop or file picker, JPG/PNG/WebP/HEIC)
 - Paper corner detection with draggable handles
-- Paper size presets (A4, Letter, A3, Tabloid)
+- Paper size presets (A4, Letter, A3, Tabloid), with a default paper size in Settings (until chosen, Letter in the US and Canada and A4 elsewhere, from the browser's region)
 - Photo quality warnings before tracing (camera too close via EXIF focal length, paper cut off at the frame edge, extreme perspective)
 - AI tracing (multiple tracer backends: IS-Net, BiRefNet, InSPyReNet)
 - Remote tracing via Replicate (`REPLICATE_API_TOKEN`, model `men1scus/birefnet` by default; `REPLICATE_RESOLUTION` optional)

@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { CutoutShape } from '@/types'
+import type { CutoutShape, PaperSize } from '@/types'
 import { BinConfigurator } from '@/components/BinConfigurator'
 import { NumericInput } from '@/components/NumericInput'
 import { getDefaultBinConfig, resetDefaultBinConfig, saveDefaultBinConfig } from '@/lib/binDefaults'
-import { FACTORY_CUTOUT_DEFAULTS, getSettings, saveSettings, type CutoutDefaults } from '@/lib/settings'
+import { FACTORY_CUTOUT_DEFAULTS, PAPER_SIZE_OPTIONS, getDefaultPaperSize, getSettings, saveSettings, type CutoutDefaults } from '@/lib/settings'
 
 const shapes: { key: CutoutShape; label: string }[] = [
   { key: 'scoop', label: 'Finger scoop' },
@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [config, setConfig] = useState(() => getDefaultBinConfig())
   const [cutouts, setCutouts] = useState<CutoutDefaults>(FACTORY_CUTOUT_DEFAULTS)
   const [textSize, setTextSize] = useState(5)
+  const [paperSize, setPaperSize] = useState<PaperSize | null>(null)
 
   useEffect(() => {
     const saved = getSettings()
@@ -28,6 +29,7 @@ export default function SettingsPage() {
       ...FACTORY_CUTOUT_DEFAULTS[key], ...saved.cutoutDefaults?.[key],
     }])) as CutoutDefaults)
     setTextSize(saved.textSize ?? 5)
+    setPaperSize(getDefaultPaperSize())
   }, [])
 
   const updateCutout = (shape: CutoutShape, key: 'radius' | 'width' | 'height', value: number) => {
@@ -40,8 +42,28 @@ export default function SettingsPage() {
     <div className="max-w-5xl mx-auto space-y-8 pb-10">
       <div>
         <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-sm text-text-muted mt-1">Defaults apply to new bins, cutouts, and labels. Existing designs keep their saved values.</p>
+        <p className="text-sm text-text-muted mt-1">Defaults apply to new photos, bins, cutouts, and labels. Existing designs keep their saved values.</p>
       </div>
+      <section className="glass rounded-xl p-5">
+        <h2 className="text-lg font-medium mb-1">Photos</h2>
+        <p className="text-xs text-text-muted mb-4">The paper size a new photo starts with. You can still change it for each photo.</p>
+        <div role="radiogroup" aria-label="Default paper size" className="inline-grid grid-cols-4 gap-0.5 rounded-[10px] glass p-0.5">
+          {PAPER_SIZE_OPTIONS.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={paperSize === option.value}
+              onClick={() => { setPaperSize(option.value); saveSettings({ paperSize: option.value }) }}
+              className={`h-7 px-3 rounded text-xs font-medium whitespace-nowrap ${
+                paperSize === option.value ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted hover:text-text-primary'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </section>
       <section className="glass rounded-xl p-5">
         <h2 className="text-lg font-medium mb-1">Cutouts and labels</h2>
         <p className="text-xs text-text-muted mb-5">Sizes are in millimetres. Finger scoops have straight sides and a bevel near the flat floor.</p>

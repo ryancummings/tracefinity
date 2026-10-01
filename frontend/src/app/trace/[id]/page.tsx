@@ -14,16 +14,10 @@ import { CornersHint, TraceHint, EditHint } from '@/components/OnboardingIllustr
 import { PhotoWarningsBanner } from '@/components/PhotoWarningsBanner'
 import { StepBar } from '@/components/StepBar'
 import { createTraceGeneration } from '@/lib/outlineEdit'
+import { PAPER_SIZE_OPTIONS, getDefaultPaperSize } from '@/lib/settings'
 import type { PaperSize, PhotoWarning, Point, Polygon, Session } from '@/types'
 
 type Step = 'corners' | 'trace' | 'edit'
-
-const PAPER_SIZE_OPTIONS: { value: PaperSize; label: string }[] = [
-  { value: 'a4', label: 'A4' },
-  { value: 'letter', label: 'Letter' },
-  { value: 'a3', label: 'A3' },
-  { value: 'tabloid', label: 'Tabloid' },
-]
 
 const MASK_PROMPT = `Generate a pure black and white silhouette mask of ONLY the tools/objects in this image.
 - Tools should be solid BLACK (#000000)
@@ -123,9 +117,7 @@ export default function TracePage() {
         if (s.corners) {
           setLocalCorners(s.corners)
         }
-        if (s.paper_size) {
-          setPaperSize(s.paper_size)
-        }
+        setPaperSize(s.paper_size ?? getDefaultPaperSize())
         if (s.corrected_image_path) {
           setCorrectedImageUrl(`/storage/${s.corrected_image_path}`)
         }

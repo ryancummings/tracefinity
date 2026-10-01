@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import SettingsPage from './page'
 import { getCutoutDefaults, getSettings } from '@/lib/settings'
@@ -19,5 +19,19 @@ describe('cutout settings', () => {
     fireEvent.change(text, { target: { value: '7.5' } })
     fireEvent.blur(text)
     expect(getSettings().textSize).toBe(7.5)
+  })
+})
+
+describe('paper size setting', () => {
+  it('starts from the browser region and saves a chosen size', () => {
+    const languages = vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-US'])
+    render(<SettingsPage />)
+    const group = screen.getByRole('radiogroup', { name: 'Default paper size' })
+    expect(within(group).getByRole('radio', { name: 'Letter' }).getAttribute('aria-checked')).toBe('true')
+
+    fireEvent.click(within(group).getByRole('radio', { name: 'A4' }))
+    expect(getSettings().paperSize).toBe('a4')
+    expect(within(group).getByRole('radio', { name: 'A4' }).getAttribute('aria-checked')).toBe('true')
+    languages.mockRestore()
   })
 })
