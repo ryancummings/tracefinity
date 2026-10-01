@@ -611,12 +611,17 @@ export function PolygonEditor({
     const p = getScaledPoint(e.clientX, e.clientY)
     if (editMode === 'split') setGesture({ kind: 'stroke', points: [p] })
     if (editMode === 'box') setGesture({ kind: 'box', start: p, end: p })
-    if (editMode === 'erase') {
-      eraseStartRef.current = polygonsRef.current
-      eraseLastRef.current = p
-      eraseAlong(p, p)
-      setGesture({ kind: 'erase', cursor: p, pressed: true })
-    }
+  }
+
+  // pointer events so the brush works with mouse, touch and pen
+  const handleOverlayPointerDown = (e: React.PointerEvent) => {
+    if (editMode !== 'erase' || !e.isPrimary || e.button !== 0 || spaceHeld.current) return
+    e.preventDefault()
+    const p = getScaledPoint(e.clientX, e.clientY)
+    eraseStartRef.current = polygonsRef.current
+    eraseLastRef.current = p
+    eraseAlong(p, p)
+    setGesture({ kind: 'erase', cursor: p, pressed: true })
   }
 
   // erases straight into the outlines without history; mouseup records one step
@@ -627,11 +632,13 @@ export function PolygonEditor({
     onPolygonsChangeRef.current(next)
   }
 
-  const handleOverlayMouseMove = (e: React.MouseEvent) => {
+  const handleOverlayPointerMove = (e: React.PointerEvent) => {
     if (editMode === 'erase' && !(gesture?.kind === 'erase' && gesture.pressed)) {
       setGesture({ kind: 'erase', cursor: getScaledPoint(e.clientX, e.clientY), pressed: false })
-      return
     }
+  }
+
+  const handleOverlayMouseMove = (e: React.MouseEvent) => {
     if (gesture?.kind !== 'draw') return
     setGesture({ ...gesture, hover: pointerPoint(e, gesture.points[gesture.points.length - 1]) })
   }
@@ -693,24 +700,28 @@ export function PolygonEditor({
   const erasing = gesture?.kind === 'erase' && gesture.pressed
   useEffect(() => {
     if (!erasing) return
-    const move = (e: MouseEvent) => {
+    eraseStartRef.current ??= polygonsRef.current
+    const move = (e: PointerEvent) => {
+      if (!e.isPrimary) return
       const p = getScaledPoint(e.clientX, e.clientY)
       // sweep from the last sample so a fast drag misses nothing in between
       gestureEndRef.current.eraseAlong(eraseLastRef.current ?? p, p)
       eraseLastRef.current = p
       setGesture({ kind: 'erase', cursor: p, pressed: true })
     }
-    const up = () => {
-      if (polygonsRef.current !== eraseStartRef.current) pushHistory(polygonsRef.current)
+    const up = () => setGesture(g => (g?.kind === 'erase' ? { ...g, pressed: false } : g))
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      // however the drag ends (release, Escape, a mode switch), what it
+      // erased becomes one undo step rather than an unrecorded change
+      if (eraseStartRef.current && polygonsRef.current !== eraseStartRef.current) pushHistory(polygonsRef.current)
       eraseStartRef.current = null
       eraseLastRef.current = null
-      setGesture(g => (g?.kind === 'erase' ? { ...g, pressed: false } : g))
-    }
-    window.addEventListener('mousemove', move)
-    window.addEventListener('mouseup', up)
-    return () => {
-      window.removeEventListener('mousemove', move)
-      window.removeEventListener('mouseup', up)
     }
   }, [erasing, getScaledPoint, pushHistory])
 
@@ -1095,7 +1106,9 @@ export function PolygonEditor({
               width={imageSize.width}
               height={imageSize.height}
               fill="transparent"
-              className={editMode === 'erase' ? 'cursor-none' : 'cursor-crosshair'}
+              className={editMode === 'erase' ? 'cursor-none touch-none' : 'cursor-crosshair'}
+              onPointerDown={handleOverlayPointerDown}
+              onPointerMove={handleOverlayPointerMove}
               onMouseDown={handleOverlayMouseDown}
               onMouseLeave={() => { if (gesture?.kind === 'erase' && !gesture.pressed) setGesture(null) }}
               onMouseMove={handleOverlayMouseMove}
