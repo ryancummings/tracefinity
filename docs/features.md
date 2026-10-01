@@ -79,6 +79,7 @@ Reference for AI agents. Check here before suggesting new features or claiming s
 - Text labels with emboss/recess options
 - Label editing (text, font size, emboss depth)
 - Per-tool cutout depth override
+- Tool and cutout settings pane on the right collapses to a small tab; the choice is remembered across selections and visits
 - Auto-centre tools in expanded grids
 - Centre view (fit all to viewport)
 

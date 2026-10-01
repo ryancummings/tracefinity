@@ -2,6 +2,7 @@
 
 import type { PlacedTool } from '@/types'
 import { NumericInput } from '@/components/NumericInput'
+import { BinInspectorPanel } from '@/components/BinInspectorPanel'
 
 interface Props {
   tool: PlacedTool
@@ -22,8 +23,7 @@ export function BinToolInspector({ tool, binDepth, maxDepth, smoothed, smoothLev
   const effectiveDepth = clampDepth(tool.depth_override ?? binDepth)
 
   return (
-    <aside aria-label="Tool settings" className="absolute right-3 top-16 z-20 w-60 max-h-[calc(100%-5rem)] overflow-y-auto rounded-xl border border-border bg-surface p-3 shadow-xl text-text-primary">
-      <h3 className="text-sm font-semibold mb-1">{tool.name}</h3>
+    <BinInspectorPanel label="Tool settings" title={tool.name}>
       <p className="text-[11px] text-text-muted mb-3">Settings for this tool in this bin.</p>
       <label className="flex items-center justify-between text-xs gap-2">Tool pocket depth (mm)
         <NumericInput value={effectiveDepth} min={Math.min(5, maxDepth)} max={maxDepth} step={0.25}
@@ -48,6 +48,6 @@ export function BinToolInspector({ tool, binDepth, maxDepth, smoothed, smoothLev
         {onEdit && <button onClick={() => onEdit(tool.tool_id)} className="flex-1 rounded border border-border-subtle px-2 py-1.5 text-xs text-accent">Edit source</button>}
         <button onClick={onRemove} data-delete-shortcut aria-label="Remove tool" className="flex-1 rounded border border-red-800 px-2 py-1.5 text-xs text-red-400">Remove</button>
       </div>
-    </aside>
+    </BinInspectorPanel>
   )
 }

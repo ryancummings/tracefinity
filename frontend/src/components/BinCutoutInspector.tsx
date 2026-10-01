@@ -2,6 +2,7 @@
 
 import type { CutoutShape, FingerHole, PlacedTool } from '@/types'
 import { NumericInput } from '@/components/NumericInput'
+import { BinInspectorPanel } from '@/components/BinInspectorPanel'
 import { isRectangularCutout } from '@/lib/cutouts'
 
 interface Props {
@@ -34,11 +35,8 @@ export function BinCutoutInspector({ hole, tool, binDepth, maxDepth, onUpdate, o
   }
 
   return (
-    <aside aria-label="Cutout settings" className="absolute right-3 top-16 z-20 w-60 max-h-[calc(100%-5rem)] overflow-y-auto rounded-xl border border-border bg-surface p-3 shadow-xl text-text-primary">
-      <div className="mb-3">
-        <h3 className="text-sm font-semibold">Cutout for {tool.name}</h3>
-        <p className="text-[11px] text-text-muted">Drag the cutout to move it. Drag its edge handle to resize round cutouts.</p>
-      </div>
+    <BinInspectorPanel label="Cutout settings" title={<>Cutout for {tool.name}</>}>
+      <p className="text-[11px] text-text-muted mb-3">Drag the cutout to move it. Drag its edge handle to resize round cutouts.</p>
       <label className="block text-xs text-text-muted mb-3">Shape
         <select aria-label="Selected cutout shape" value={shape} onChange={e => changeShape(e.target.value as CutoutShape)} className="mt-1 w-full rounded bg-elevated px-2 py-1.5 text-xs text-text-primary border border-border-subtle">
           <option value="scoop">Finger scoop</option><option value="circle">Sphere</option><option value="cylinder">Cylinder</option><option value="square">Square</option><option value="rectangle">Rectangle</option><option value="filleted_rectangle">Filleted rectangle</option>
@@ -72,6 +70,6 @@ export function BinCutoutInspector({ hole, tool, binDepth, maxDepth, onUpdate, o
         {hole.depth_override != null && <button className="text-xs text-accent" onClick={() => onDepthChange(null)}>Use inherited depth ({inheritedDepth.toFixed(2)} mm)</button>}
       </div>
       <button onClick={onRemove} data-delete-shortcut aria-label="Remove cutout" className="mt-4 w-full rounded border border-red-800 px-2 py-1.5 text-xs text-red-400 hover:bg-red-900/20">Remove cutout</button>
-    </aside>
+    </BinInspectorPanel>
   )
 }
