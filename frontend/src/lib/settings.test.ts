@@ -5,9 +5,11 @@ import { getDefaultPaperSize, localePaperSize, saveSettings } from './settings'
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks() })
 
 describe('localePaperSize', () => {
-  it('uses Letter in the US and Canada', () => {
+  it('uses Letter where it is the everyday sheet', () => {
     expect(localePaperSize(['en-US'])).toBe('letter')
     expect(localePaperSize(['fr-CA'])).toBe('letter')
+    expect(localePaperSize(['es-MX'])).toBe('letter')
+    expect(localePaperSize(['en-PH'])).toBe('letter')
   })
 
   it('infers the region of a bare language', () => {
