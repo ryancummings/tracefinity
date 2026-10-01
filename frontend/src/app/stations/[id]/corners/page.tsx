@@ -11,14 +11,9 @@ import { getImageUrl, getPhotoStation, updatePhotoStation } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/useTheme'
 import type { PaperSize, PhotoStation, Point } from '@/types'
+import { PAPER_SIZE_OPTIONS } from '@/lib/settings'
 
 const STEPS = ['Stations', 'Corners']
-const PAPER_SIZE_OPTIONS: { value: PaperSize; label: string }[] = [
-  { value: 'a4', label: 'A4' },
-  { value: 'letter', label: 'Letter' },
-  { value: 'a3', label: 'A3' },
-  { value: 'tabloid', label: 'Tabloid' },
-]
 
 function fallbackStationImage(station: PhotoStation): string {
   const width = Math.max(1, station.image_width)
