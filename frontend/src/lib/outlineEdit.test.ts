@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Polygon } from '@/types'
+import { straightenClick, straightenOtherSide } from './outlineEdit'
 import { STALE_TRACE_MESSAGE, applyMergeResult, createTraceGeneration, applySplitResults, keepCurrentLabels, labelAnchor, nextToolNumber, pointInRing, snapAngle, straighten, straightenRemoval } from './outlineEdit'
 
 // a 100x40 bar whose top edge was traced wobbly: 0 and 4 are its corners
@@ -147,5 +148,38 @@ describe('createTraceGeneration', () => {
     gen.bump()
     finish('outline')
     await expect(pending).rejects.toThrow(STALE_TRACE_MESSAGE)
+  })
+})
+
+describe('straighten clicks', () => {
+  it('straightens on the second click and starts afresh on the third', () => {
+    let step = straightenClick(null, 'bar', wobblyBar, 0)
+    expect(step.points).toBeUndefined()
+    step = straightenClick(step.state, 'bar', wobblyBar, 4)
+    expect(step.points).toHaveLength(4)
+    // the next click begins a new pair instead of straightening from corner 4
+    const next = straightenClick(step.state, 'bar', step.points!, 2)
+    expect(next.points).toBeUndefined()
+    expect(next.state).toEqual({ kind: 'picking', polyId: 'bar', start: 2 })
+  })
+
+  it('swaps to the other side of the original outline', () => {
+    const first = straightenClick(straightenClick(null, 'bar', wobblyBar, 0).state, 'bar', wobblyBar, 4)
+    const other = straightenOtherSide(first.state, first.points)
+    // keeps the wobbly top edge, straightens the long way round instead
+    expect(other.points).toEqual(wobblyBar.slice(0, 5))
+    // and back again
+    expect(straightenOtherSide(other.state, other.points).points).toEqual(first.points)
+  })
+
+  it('will not swap once the outline has been edited', () => {
+    const first = straightenClick(straightenClick(null, 'bar', wobblyBar, 0).state, 'bar', wobblyBar, 4)
+    const edited = first.points!.map(p => ({ ...p }))
+    expect(straightenOtherSide(first.state, edited)).toEqual({ state: null })
+  })
+
+  it('ignores neighbouring corners that are already straight', () => {
+    const picking = straightenClick(null, 'bar', wobblyBar, 5).state
+    expect(straightenClick(picking, 'bar', wobblyBar, 6)).toEqual({ state: null })
   })
 })
