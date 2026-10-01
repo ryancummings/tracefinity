@@ -7,7 +7,6 @@ export function useHistory<T>(
   maxEntries: number = MAX_HISTORY
 ): {
   set: (value: T) => void
-  replace: (value: T) => void
   undo: () => void
   redo: () => void
   canUndo: boolean
@@ -30,11 +29,6 @@ export function useHistory<T>(
     })
     setIndex(prev => Math.min(prev + 1, maxEntries - 1))
   }, [index, maxEntries])
-
-  // swap the current entry, for revising the step just taken
-  const replace = useCallback((value: T) => {
-    setEntries(prev => prev.map((entry, i) => (i === index ? JSON.parse(JSON.stringify(value)) : entry)))
-  }, [index])
 
   const undo = useCallback(() => {
     if (!canUndo) return
@@ -62,5 +56,5 @@ export function useHistory<T>(
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [undo, redo])
 
-  return { set, replace, undo, redo, canUndo, canRedo }
+  return { set, undo, redo, canUndo, canRedo }
 }

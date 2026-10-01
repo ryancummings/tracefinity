@@ -2,39 +2,6 @@ import type { Point, Polygon } from '@/types'
 
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
 
-// indices strictly between from and to walking forward around a closed ring
-function forwardBetween(n: number, from: number, to: number): number[] {
-  const out: number[] = []
-  for (let i = (from + 1) % n; i !== to; i = (i + 1) % n) out.push(i)
-  return out
-}
-
-function arcLength(points: Point[], from: number, to: number): number {
-  const n = points.length
-  let len = 0
-  for (let i = from; i !== to; i = (i + 1) % n) len += dist(points[i], points[(i + 1) % n])
-  return len
-}
-
-/**
- * Vertices that straightening between a and b would remove. The ring has two
- * paths between them; the shorter one (by length) is replaced by a straight
- * edge, or the longer one when `longWay` is set. Never removes so much that
- * fewer than three vertices remain.
- */
-export function straightenRemoval(points: Point[], a: number, b: number, longWay = false): number[] {
-  const n = points.length
-  if (a === b || a < 0 || b < 0 || a >= n || b >= n) return []
-  const forwardIsShorter = arcLength(points, a, b) <= arcLength(points, b, a)
-  const removed = forwardIsShorter !== longWay ? forwardBetween(n, a, b) : forwardBetween(n, b, a)
-  return n - removed.length >= 3 ? removed : []
-}
-
-export function straighten(points: Point[], a: number, b: number, longWay = false): Point[] {
-  const removed = new Set(straightenRemoval(points, a, b, longWay))
-  return points.filter((_, i) => !removed.has(i))
-}
-
 export function pointInRing(p: Point, ring: Point[]): boolean {
   let inside = false
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -218,47 +185,27 @@ export function createTraceGeneration() {
 }
 
 /**
- * Straighten tool state. `picking` waits for the second corner; `done`
- * remembers the last straighten so it can be swapped to the other side.
+ * Delete every vertex within `radius` of the brush path from a to b; the
+ * neighbours on either side join up. An outline is never cut below three
+ * points, while a hole that would be is removed. Unchanged outlines, and
+ * the array itself when nothing was erased, keep their identity.
  */
-export type StraightenState =
-  | { kind: 'picking'; polyId: string; start: number }
-  | { kind: 'done'; polyId: string; before: Point[]; a: number; b: number; longWay: boolean; result: Point[] }
-  | null
-
-/**
- * One vertex click. Every straighten takes exactly two clicks and the next
- * click starts afresh, so a new edge never straightens from the last corner.
- * `points` is the outline to apply, when the click completed a straighten.
- */
-export function straightenClick(
-  state: StraightenState,
-  polyId: string,
-  points: Point[],
-  idx: number,
-): { state: StraightenState; points?: Point[] } {
-  if (state?.kind !== 'picking' || state.polyId !== polyId) {
-    return { state: { kind: 'picking', polyId, start: idx } }
-  }
-  if (state.start === idx || straightenRemoval(points, state.start, idx).length === 0) {
-    // same corner again, or neighbours already joined by one straight edge
-    return { state: null }
-  }
-  const result = straighten(points, state.start, idx)
-  return {
-    state: { kind: 'done', polyId, before: points, a: state.start, b: idx, longWay: false, result },
-    points: result,
-  }
-}
-
-/**
- * Redo the last straighten along the other side of the outline. Returns no
- * points when the outline was edited since, or the other side is too short.
- */
-export function straightenOtherSide(state: StraightenState, current: Point[] | undefined): { state: StraightenState; points?: Point[] } {
-  if (state?.kind !== 'done' || current !== state.result) return { state: null }
-  const longWay = !state.longWay
-  if (straightenRemoval(state.before, state.a, state.b, longWay).length === 0) return { state }
-  const result = straighten(state.before, state.a, state.b, longWay)
-  return { state: { ...state, longWay, result }, points: result }
+export function erasePoints(polygons: Polygon[], a: Point, b: Point, radius: number): Polygon[] {
+  const survivors = (ring: Point[]) => ring.filter(p => distToSegment(p, a, b) > radius)
+  let changed = false
+  const next = polygons.map(poly => {
+    const kept = survivors(poly.points)
+    const points = kept.length === poly.points.length || kept.length < 3 ? poly.points : kept
+    let ringsChanged = false
+    const rings = poly.interior_rings.flatMap(ring => {
+      const left = survivors(ring)
+      if (left.length === ring.length) return [ring]
+      ringsChanged = true
+      return left.length >= 3 ? [left] : []
+    })
+    if (points === poly.points && !ringsChanged) return poly
+    changed = true
+    return { ...poly, points, interior_rings: ringsChanged ? rings : poly.interior_rings }
+  })
+  return changed ? next : polygons
 }
