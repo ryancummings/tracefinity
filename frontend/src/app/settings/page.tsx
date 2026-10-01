@@ -47,22 +47,27 @@ export default function SettingsPage() {
       <section className="glass rounded-xl p-5">
         <h2 className="text-lg font-medium mb-1">Photos</h2>
         <p className="text-xs text-text-muted mb-4">The paper size a new photo starts with. You can still change it for each photo.</p>
-        <div role="radiogroup" aria-label="Default paper size" className="inline-grid grid-cols-4 gap-0.5 rounded-[10px] glass p-0.5">
-          {PAPER_SIZE_OPTIONS.map(option => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={paperSize === option.value}
-              onClick={() => { setPaperSize(option.value); saveSettings({ paperSize: option.value }) }}
-              className={`h-7 px-3 rounded text-xs font-medium whitespace-nowrap ${
-                paperSize === option.value ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted hover:text-text-primary'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <fieldset>
+          <legend className="sr-only">Default paper size</legend>
+          <div className="inline-grid grid-cols-4 gap-0.5 rounded-[10px] glass p-0.5">
+            {PAPER_SIZE_OPTIONS.map(option => (
+              <label key={option.value} className="relative">
+                {/* native radios give arrow-key movement and a single tab stop */}
+                <input
+                  type="radio"
+                  name="default-paper-size"
+                  value={option.value}
+                  checked={paperSize === option.value}
+                  onChange={() => { setPaperSize(option.value); saveSettings({ paperSize: option.value }) }}
+                  className="peer sr-only"
+                />
+                <span className="flex h-7 px-3 items-center rounded text-xs font-medium whitespace-nowrap cursor-pointer text-text-muted hover:text-text-primary peer-checked:bg-surface peer-checked:text-text-primary peer-checked:shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-accent">
+                  {option.label}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
       </section>
       <section className="glass rounded-xl p-5">
         <h2 className="text-lg font-medium mb-1">Cutouts and labels</h2>

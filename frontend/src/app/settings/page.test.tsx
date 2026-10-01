@@ -26,12 +26,14 @@ describe('paper size setting', () => {
   it('starts from the browser region and saves a chosen size', () => {
     const languages = vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-US'])
     render(<SettingsPage />)
-    const group = screen.getByRole('radiogroup', { name: 'Default paper size' })
-    expect(within(group).getByRole('radio', { name: 'Letter' }).getAttribute('aria-checked')).toBe('true')
+    const group = screen.getByRole('group', { name: 'Default paper size' })
+    const radio = (name: string) => within(group).getByRole('radio', { name }) as HTMLInputElement
+    expect(radio('Letter').checked).toBe(true)
 
-    fireEvent.click(within(group).getByRole('radio', { name: 'A4' }))
+    fireEvent.click(radio('A4'))
     expect(getSettings().paperSize).toBe('a4')
-    expect(within(group).getByRole('radio', { name: 'A4' }).getAttribute('aria-checked')).toBe('true')
+    expect(radio('A4').checked).toBe(true)
+    expect(radio('Letter').checked).toBe(false)
     languages.mockRestore()
   })
 })
