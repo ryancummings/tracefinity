@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { Point, Polygon } from '@/types'
-import { Undo2, Redo2, Trash2, Plus, Minus, Move, Slash, Scissors, Combine, PenTool, SquareDashedMousePointer, Loader2 } from 'lucide-react'
+import { Undo2, Redo2, Trash2, Plus, Minus, Move, Slash, ArrowLeftRight, Scissors, Combine, PenTool, SquareDashedMousePointer, Loader2 } from 'lucide-react'
 import { polygonPathData } from '@/lib/svg'
-import { applyMergeResult, applySplitResults, keepCurrentLabels, nextToolNumber, snapAngle, straighten, straightenRemoval } from '@/lib/outlineEdit'
+import { applyMergeResult, applySplitResults, keepCurrentLabels, nextToolNumber, snapAngle, straightenClick, straightenOtherSide, straightenRemoval } from '@/lib/outlineEdit'
+import type { StraightenState } from '@/lib/outlineEdit'
 import { OutlineLabels } from '@/components/OutlineLabels'
 import { ApiError } from '@/lib/api'
 import { useHistory } from '@/hooks/useHistory'
@@ -34,7 +35,7 @@ const HALO_STROKE = 'rgba(2, 6, 23, 0.55)'
 type EditMode = 'select' | 'vertex' | 'add-vertex' | 'delete-vertex' | 'straighten' | 'split' | 'merge' | 'draw' | 'box'
 // in-progress multi-step input for the outline tools
 type Gesture =
-  | { kind: 'straighten'; polyId: string; start: number; hover: number | null }
+  | { kind: 'straighten'; step: NonNullable<StraightenState>; hover: number | null }
   | { kind: 'stroke'; points: Point[] }
   | { kind: 'box'; start: Point; end: Point }
   | { kind: 'draw'; points: Point[]; hover: Point | null }
@@ -50,7 +51,7 @@ const MODE_HINTS: Record<EditMode, string> = {
   vertex: '',
   'add-vertex': 'Click on an edge to add a vertex',
   'delete-vertex': 'Click a vertex to remove it',
-  straighten: 'Click two corners to make the edge between them straight. Shift takes the other way round',
+  straighten: 'Click the first corner of the edge to straighten',
   split: 'Drag a line across an outline to cut it in two. Hold Shift for a straight cut',
   merge: 'Click the outlines to join, one after another',
   draw: 'Click around the object. Click the first point or press Enter to finish; Shift snaps to 45°',
@@ -115,13 +116,12 @@ export function PolygonEditor({
   const [editMode, setEditMode] = useState<EditMode>('select')
   const [dragging, setDragging] = useState<DragState>(null)
   const [gesture, setGesture] = useState<Gesture>(null)
-  const [shiftHeld, setShiftHeld] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
   // undo and redo restore outlines but keep today's names, so renaming in
   // the sidebar or on the canvas is never lost to undoing a later edit
-  const { set: pushHistory, undo: handleUndo, redo: handleRedo, canUndo, canRedo } = useHistory<Polygon[]>(
+  const { set: pushHistory, replace: replaceHistory, undo: handleUndo, redo: handleRedo, canUndo, canRedo } = useHistory<Polygon[]>(
     polygons,
     restored => onPolygonsChange(keepCurrentLabels(restored, polygonsRef.current))
   )
@@ -210,13 +210,11 @@ export function PolygonEditor({
       if (e.code === 'Space' && !e.repeat) {
         spaceHeld.current = true
       }
-      if (e.key === 'Shift') setShiftHeld(true)
     }
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         spaceHeld.current = false
       }
-      if (e.key === 'Shift') setShiftHeld(false)
     }
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
@@ -483,25 +481,27 @@ export function PolygonEditor({
     }
   }
 
+  const straightenStep = gesture?.kind === 'straighten' ? gesture.step : null
+
   const handleStraightenClick = (polyId: string, pointIdx: number) => {
     const poly = polygons.find(p => p.id === polyId)
     if (!poly) return
-    if (gesture?.kind !== 'straighten' || gesture.polyId !== polyId) {
-      setGesture({ kind: 'straighten', polyId, start: pointIdx, hover: null })
-      return
+    const { state, points } = straightenClick(straightenStep, polyId, poly.points, pointIdx)
+    if (points) updatePolygons(polygons.map(p => (p.id === polyId ? { ...p, points } : p)))
+    setGesture(state ? { kind: 'straighten', step: state, hover: null } : null)
+  }
+
+  // swap the last straighten to the other side, as the same undo step
+  const handleStraightenOtherSide = () => {
+    if (straightenStep?.kind !== 'done') return
+    const current = polygons.find(p => p.id === straightenStep.polyId)
+    const { state, points } = straightenOtherSide(straightenStep, current?.points)
+    if (points) {
+      const next = polygons.map(p => (p.id === straightenStep.polyId ? { ...p, points } : p))
+      replaceHistory(next)
+      onPolygonsChange(next)
     }
-    if (gesture.start === pointIdx) {
-      setGesture(null)
-      return
-    }
-    const removed = straightenRemoval(poly.points, gesture.start, pointIdx, shiftHeld)
-    if (removed.length > 0) {
-      const points = straighten(poly.points, gesture.start, pointIdx, shiftHeld)
-      updatePolygons(polygons.map(p => (p.id === polyId ? { ...p, points } : p)))
-    }
-    // carry on from the corner just reached so a run of edges can be squared up
-    const nextStart = pointIdx - removed.filter(i => i < pointIdx).length
-    setGesture({ kind: 'straighten', polyId, start: nextStart, hover: null })
+    setGesture(state ? { kind: 'straighten', step: state, hover: null } : null)
   }
 
   const handleMergeClick = (id: string) => {
@@ -762,8 +762,10 @@ export function PolygonEditor({
     modeHint = 'Tracing the boxed object...'
   } else if (gesture?.kind === 'merge') {
     modeHint = 'Click another outline to join it to the highlighted one. Esc to stop'
-  } else if (gesture?.kind === 'straighten') {
-    modeHint = 'Click the other corner. Shift takes the other way round; Esc to stop'
+  } else if (straightenStep?.kind === 'picking') {
+    modeHint = 'Click the second corner. Red shows the points that will be removed'
+  } else if (straightenStep?.kind === 'done') {
+    modeHint = 'Straightened. Wrong part removed? Click Other side. Or pick two more corners'
   }
   const canvasMode = editable && CANVAS_MODES.includes(editMode)
 
@@ -773,7 +775,7 @@ export function PolygonEditor({
     const from = points[start]
     if (!from) return null
     const to = hover !== null ? points[hover] : undefined
-    const removed = hover !== null ? straightenRemoval(points, start, hover, shiftHeld) : []
+    const removed = hover !== null ? straightenRemoval(points, start, hover) : []
     // removal runs forward from whichever endpoint precedes it
     const path = removed.length === 0 ? [] : removed[0] === (start + 1) % points.length
       ? [start, ...removed, hover!]
@@ -1024,8 +1026,8 @@ export function PolygonEditor({
                         r={uiScale * 16}
                         fill="transparent"
                         className={editMode === 'delete-vertex' || editMode === 'straighten' ? 'cursor-pointer touch-none' : 'cursor-move touch-none'}
-                        onMouseEnter={editMode === 'straighten' && gesture?.kind === 'straighten' && gesture.polyId === poly.id
-                          ? () => setGesture({ ...gesture, hover: idx })
+                        onMouseEnter={straightenStep?.kind === 'picking' && straightenStep.polyId === poly.id
+                          ? () => setGesture({ kind: 'straighten', step: straightenStep, hover: idx })
                           : undefined}
                         onMouseLeave={editMode === 'straighten' && gesture?.kind === 'straighten'
                           ? () => setGesture(g => (g?.kind === 'straighten' ? { ...g, hover: null } : g))
@@ -1046,7 +1048,8 @@ export function PolygonEditor({
                     </g>
                   ))}
 
-                {gesture?.kind === 'straighten' && gesture.polyId === poly.id && renderStraightenPreview(poly.points, gesture.start, gesture.hover)}
+                {gesture?.kind === 'straighten' && gesture.step.kind === 'picking' && gesture.step.polyId === poly.id
+                  && renderStraightenPreview(poly.points, gesture.step.start, gesture.hover)}
               </g>
             )
           })}
@@ -1066,6 +1069,18 @@ export function PolygonEditor({
             />
           )}
           {renderGesturePreview()}
+          {straightenStep?.kind === 'done' && (() => {
+            const from = straightenStep.before[straightenStep.a]
+            const to = straightenStep.before[straightenStep.b]
+            return (
+              <line
+                x1={from.x} y1={from.y} x2={to.x} y2={to.y}
+                stroke="rgb(34, 197, 94)"
+                strokeWidth={uiScale * 3}
+                className="pointer-events-none"
+              />
+            )
+          })()}
         </svg>
 
         {showLabels && (
@@ -1079,6 +1094,30 @@ export function PolygonEditor({
             interactive={editable && (editMode === 'select' || editMode === 'vertex') && !dragging}
           />
         )}
+
+        {straightenStep?.kind === 'done' && (() => {
+          const from = straightenStep.before[straightenStep.a]
+          const to = straightenStep.before[straightenStep.b]
+          const left = (((from.x + to.x) / 2 - vb.x) / vb.w) * 100
+          const top = (((from.y + to.y) / 2 - vb.y) / vb.h) * 100
+          return (
+            <div
+              className="absolute -translate-x-1/2 -translate-y-[calc(100%+10px)] z-10"
+              style={{ left: `${left}%`, top: `${top}%` }}
+              onClick={e => e.stopPropagation()}
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={handleStraightenOtherSide}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-surface text-text-primary border border-border shadow-lg hover:bg-elevated"
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5" />
+                Other side
+              </button>
+            </div>
+          )
+        })()}
 
         {/* zoom controls */}
         <div

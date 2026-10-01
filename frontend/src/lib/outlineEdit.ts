@@ -216,3 +216,49 @@ export function createTraceGeneration() {
     },
   }
 }
+
+/**
+ * Straighten tool state. `picking` waits for the second corner; `done`
+ * remembers the last straighten so it can be swapped to the other side.
+ */
+export type StraightenState =
+  | { kind: 'picking'; polyId: string; start: number }
+  | { kind: 'done'; polyId: string; before: Point[]; a: number; b: number; longWay: boolean; result: Point[] }
+  | null
+
+/**
+ * One vertex click. Every straighten takes exactly two clicks and the next
+ * click starts afresh, so a new edge never straightens from the last corner.
+ * `points` is the outline to apply, when the click completed a straighten.
+ */
+export function straightenClick(
+  state: StraightenState,
+  polyId: string,
+  points: Point[],
+  idx: number,
+): { state: StraightenState; points?: Point[] } {
+  if (state?.kind !== 'picking' || state.polyId !== polyId) {
+    return { state: { kind: 'picking', polyId, start: idx } }
+  }
+  if (state.start === idx || straightenRemoval(points, state.start, idx).length === 0) {
+    // same corner again, or neighbours already joined by one straight edge
+    return { state: null }
+  }
+  const result = straighten(points, state.start, idx)
+  return {
+    state: { kind: 'done', polyId, before: points, a: state.start, b: idx, longWay: false, result },
+    points: result,
+  }
+}
+
+/**
+ * Redo the last straighten along the other side of the outline. Returns no
+ * points when the outline was edited since, or the other side is too short.
+ */
+export function straightenOtherSide(state: StraightenState, current: Point[] | undefined): { state: StraightenState; points?: Point[] } {
+  if (state?.kind !== 'done' || current !== state.result) return { state: null }
+  const longWay = !state.longWay
+  if (straightenRemoval(state.before, state.a, state.b, longWay).length === 0) return { state }
+  const result = straighten(state.before, state.a, state.b, longWay)
+  return { state: { ...state, longWay, result }, points: result }
+}
