@@ -36,4 +36,15 @@ describe('paper size setting', () => {
     expect(radio('Letter').checked).toBe(false)
     languages.mockRestore()
   })
+
+  it('saves the inferred size when it is clicked, so a later region change cannot move it', () => {
+    const languages = vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['en-GB'])
+    render(<SettingsPage />)
+    expect(screen.getByText(/Following your browser's region/)).toBeTruthy()
+    const group = screen.getByRole('group', { name: 'Default paper size' })
+    fireEvent.click(within(group).getByRole('radio', { name: 'A4' }))
+    expect(getSettings().paperSize).toBe('a4')
+    expect(screen.queryByText(/Following your browser's region/)).toBeNull()
+    languages.mockRestore()
+  })
 })

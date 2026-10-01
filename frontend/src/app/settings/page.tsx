@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const [cutouts, setCutouts] = useState<CutoutDefaults>(FACTORY_CUTOUT_DEFAULTS)
   const [textSize, setTextSize] = useState(5)
   const [paperSize, setPaperSize] = useState<PaperSize | null>(null)
+  const [paperSizeChosen, setPaperSizeChosen] = useState(false)
 
   useEffect(() => {
     const saved = getSettings()
@@ -30,7 +31,14 @@ export default function SettingsPage() {
     }])) as CutoutDefaults)
     setTextSize(saved.textSize ?? 5)
     setPaperSize(getDefaultPaperSize())
+    setPaperSizeChosen(saved.paperSize !== undefined)
   }, [])
+
+  const choosePaperSize = (size: PaperSize) => {
+    setPaperSize(size)
+    setPaperSizeChosen(true)
+    saveSettings({ paperSize: size })
+  }
 
   const updateCutout = (shape: CutoutShape, key: 'radius' | 'width' | 'height', value: number) => {
     const next = { ...cutouts, [shape]: { ...cutouts[shape], [key]: value } }
@@ -58,7 +66,9 @@ export default function SettingsPage() {
                   name="default-paper-size"
                   value={option.value}
                   checked={paperSize === option.value}
-                  onChange={() => { setPaperSize(option.value); saveSettings({ paperSize: option.value }) }}
+                  onChange={() => choosePaperSize(option.value)}
+                  // a click on the already-selected size fires no change, but still means "keep this"
+                  onClick={() => choosePaperSize(option.value)}
                   className="peer sr-only"
                 />
                 <span className="flex h-7 px-3 items-center rounded text-xs font-medium whitespace-nowrap cursor-pointer text-text-muted hover:text-text-primary peer-checked:bg-surface peer-checked:text-text-primary peer-checked:shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-accent">
@@ -68,6 +78,9 @@ export default function SettingsPage() {
             ))}
           </div>
         </fieldset>
+        {!paperSizeChosen && (
+          <p className="text-xs text-text-muted mt-2">Following your browser&apos;s region until you choose a size.</p>
+        )}
       </section>
       <section className="glass rounded-xl p-5">
         <h2 className="text-lg font-medium mb-1">Cutouts and labels</h2>
