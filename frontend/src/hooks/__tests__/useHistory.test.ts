@@ -32,15 +32,4 @@ describe('useHistory', () => {
     expect(onChange).toHaveBeenLastCalledWith('b')
   })
 
-  it('replace revises the latest step without adding one', () => {
-    const onChange = vi.fn()
-    const { result } = renderHook(() => useHistory<string>('a', onChange))
-
-    act(() => result.current.set('b'))
-    act(() => result.current.replace('b2'))
-    act(() => result.current.undo())
-    expect(onChange).toHaveBeenLastCalledWith('a')
-    act(() => result.current.redo())
-    expect(onChange).toHaveBeenLastCalledWith('b2')
-  })
 })

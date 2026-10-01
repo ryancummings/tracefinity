@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Polygon } from '@/types'
-import { straightenClick, straightenOtherSide } from './outlineEdit'
-import { STALE_TRACE_MESSAGE, applyMergeResult, createTraceGeneration, applySplitResults, keepCurrentLabels, labelAnchor, nextToolNumber, pointInRing, snapAngle, straighten, straightenRemoval } from './outlineEdit'
+import { STALE_TRACE_MESSAGE, applyMergeResult, applySplitResults, createTraceGeneration, erasePoints, keepCurrentLabels, labelAnchor, nextToolNumber, pointInRing, snapAngle } from './outlineEdit'
 
 // a 100x40 bar whose top edge was traced wobbly: 0 and 4 are its corners
 const wobblyBar = [
@@ -13,31 +12,6 @@ const wobblyBar = [
   { x: 100, y: 40 },
   { x: 0, y: 40 },
 ]
-
-describe('straighten', () => {
-  it('replaces the shorter path between two corners with one straight edge', () => {
-    expect(straighten(wobblyBar, 0, 4)).toEqual([
-      { x: 0, y: 0 },
-      { x: 100, y: 0 },
-      { x: 100, y: 40 },
-      { x: 0, y: 40 },
-    ])
-  })
-
-  it('picks the same path whichever corner is clicked first', () => {
-    expect(straightenRemoval(wobblyBar, 4, 0)).toEqual([1, 2, 3])
-  })
-
-  it('takes the long way round on request', () => {
-    expect(straightenRemoval(wobblyBar, 0, 4, true)).toEqual([5, 6])
-  })
-
-  it('refuses to collapse the outline below a triangle', () => {
-    const tri = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 10 }]
-    expect(straightenRemoval(tri, 0, 2)).toEqual([])
-    expect(straightenRemoval(tri, 1, 1)).toEqual([])
-  })
-})
 
 describe('labelAnchor', () => {
   it('lands inside an L-shaped outline whose centroid does not', () => {
@@ -151,35 +125,42 @@ describe('createTraceGeneration', () => {
   })
 })
 
-describe('straighten clicks', () => {
-  it('straightens on the second click and starts afresh on the third', () => {
-    let step = straightenClick(null, 'bar', wobblyBar, 0)
-    expect(step.points).toBeUndefined()
-    step = straightenClick(step.state, 'bar', wobblyBar, 4)
-    expect(step.points).toHaveLength(4)
-    // the next click begins a new pair instead of straightening from corner 4
-    const next = straightenClick(step.state, 'bar', step.points!, 2)
-    expect(next.points).toBeUndefined()
-    expect(next.state).toEqual({ kind: 'picking', polyId: 'bar', start: 2 })
+describe('erasePoints', () => {
+  const bar: Polygon = { id: 'bar', label: 'bar', points: wobblyBar, finger_holes: [], interior_rings: [] }
+
+  it('erases the wobble along an edge so the corners join straight', () => {
+    // brush swept along the top edge, clear of the corners
+    const [after] = erasePoints([bar], { x: 20, y: 0 }, { x: 80, y: 0 }, 6)
+    expect(after.points).toEqual([
+      { x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 40 }, { x: 0, y: 40 },
+    ])
   })
 
-  it('swaps to the other side of the original outline', () => {
-    const first = straightenClick(straightenClick(null, 'bar', wobblyBar, 0).state, 'bar', wobblyBar, 4)
-    const other = straightenOtherSide(first.state, first.points)
-    // keeps the wobbly top edge, straightens the long way round instead
-    expect(other.points).toEqual(wobblyBar.slice(0, 5))
-    // and back again
-    expect(straightenOtherSide(other.state, other.points).points).toEqual(first.points)
+  it('catches points between two brush samples on a fast drag', () => {
+    const [after] = erasePoints([bar], { x: 10, y: 1 }, { x: 90, y: 1 }, 3)
+    expect(after.points).toHaveLength(4)
   })
 
-  it('will not swap once the outline has been edited', () => {
-    const first = straightenClick(straightenClick(null, 'bar', wobblyBar, 0).state, 'bar', wobblyBar, 4)
-    const edited = first.points!.map(p => ({ ...p }))
-    expect(straightenOtherSide(first.state, edited)).toEqual({ state: null })
+  it('leaves untouched outlines and the list itself alone', () => {
+    const other: Polygon = { ...bar, id: 'other' }
+    const list = [bar, other]
+    expect(erasePoints(list, { x: 500, y: 500 }, { x: 500, y: 500 }, 10)).toBe(list)
+    const next = erasePoints(list, { x: 50, y: -1 }, { x: 50, y: -1 }, 3)
+    expect(next).not.toBe(list)
+    expect(next[0].points).not.toContainEqual({ x: 50, y: -1 })
   })
 
-  it('ignores neighbouring corners that are already straight', () => {
-    const picking = straightenClick(null, 'bar', wobblyBar, 5).state
-    expect(straightenClick(picking, 'bar', wobblyBar, 6)).toEqual({ state: null })
+  it('never cuts an outline below three points', () => {
+    const [after] = erasePoints([bar], { x: 0, y: 20 }, { x: 100, y: 20 }, 100)
+    expect(after).toBe(bar)
+  })
+
+  it('removes a hole the brush wipes out', () => {
+    const square = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]
+    const hole = [{ x: 40, y: 40 }, { x: 60, y: 40 }, { x: 60, y: 60 }, { x: 40, y: 60 }]
+    const withHole: Polygon = { ...bar, points: square, interior_rings: [hole] }
+    const [after] = erasePoints([withHole], { x: 50, y: 50 }, { x: 50, y: 50 }, 20)
+    expect(after.interior_rings).toEqual([])
+    expect(after.points).toBe(square)
   })
 })

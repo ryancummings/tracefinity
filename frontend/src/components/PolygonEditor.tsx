@@ -2,10 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { Point, Polygon } from '@/types'
-import { Undo2, Redo2, Trash2, Plus, Minus, Move, Slash, ArrowLeftRight, Scissors, Combine, PenTool, SquareDashedMousePointer, Loader2 } from 'lucide-react'
+import { Undo2, Redo2, Trash2, Plus, Minus, Move, Eraser, Scissors, Combine, PenTool, SquareDashedMousePointer, Loader2 } from 'lucide-react'
 import { polygonPathData } from '@/lib/svg'
-import { applyMergeResult, applySplitResults, keepCurrentLabels, nextToolNumber, snapAngle, straightenClick, straightenOtherSide, straightenRemoval } from '@/lib/outlineEdit'
-import type { StraightenState } from '@/lib/outlineEdit'
+import { applyMergeResult, applySplitResults, erasePoints, keepCurrentLabels, nextToolNumber, snapAngle } from '@/lib/outlineEdit'
 import { OutlineLabels } from '@/components/OutlineLabels'
 import { ApiError } from '@/lib/api'
 import { useHistory } from '@/hooks/useHistory'
@@ -32,12 +31,11 @@ interface Props {
 // dark halo painted under outlines so they stay legible over photographs
 const HALO_STROKE = 'rgba(2, 6, 23, 0.55)'
 
-type EditMode = 'select' | 'vertex' | 'add-vertex' | 'delete-vertex' | 'straighten' | 'split' | 'merge' | 'draw' | 'box'
+type EditMode = 'select' | 'vertex' | 'add-vertex' | 'delete-vertex' | 'erase' | 'split' | 'merge' | 'draw' | 'box'
 // in-progress multi-step input for the outline tools
 type Gesture =
-  // `after` is the outline set a completed straighten produced; any other
-  // edit, undo or redo replaces it, which retires the Other side control
-  | { kind: 'straighten'; step: NonNullable<StraightenState>; hover: number | null; after?: Polygon[] }
+  // brush position; `pressed` while a drag is erasing
+  | { kind: 'erase'; cursor: Point; pressed: boolean }
   | { kind: 'stroke'; points: Point[] }
   | { kind: 'box'; start: Point; end: Point }
   | { kind: 'draw'; points: Point[]; hover: Point | null }
@@ -45,20 +43,24 @@ type Gesture =
   | null
 
 // modes where an overlay captures pointer input instead of the outlines
-const CANVAS_MODES: EditMode[] = ['split', 'draw', 'box']
-const VERTEX_MODES: EditMode[] = ['vertex', 'select', 'add-vertex', 'delete-vertex', 'straighten']
+const CANVAS_MODES: EditMode[] = ['erase', 'split', 'draw', 'box']
+const VERTEX_MODES: EditMode[] = ['vertex', 'select', 'add-vertex', 'delete-vertex']
 
 const MODE_HINTS: Record<EditMode, string> = {
   select: '',
   vertex: '',
   'add-vertex': 'Click on an edge to add a vertex',
   'delete-vertex': 'Click a vertex to remove it',
-  straighten: 'Click the first corner of the edge to straighten',
+  erase: 'Drag over points to erase them; the points either side join up. [ and ] change the brush',
   split: 'Drag a line across an outline to cut it in two. Hold Shift for a straight cut',
   merge: 'Click the outlines to join, one after another',
   draw: 'Click around the object. Click the first point or press Enter to finish; Shift snaps to 45°',
   box: 'Drag a box around a missed object to trace it',
 }
+
+const ERASER_MIN = 4
+const ERASER_MAX = 60
+const ERASER_DEFAULT = 16
 
 function newPolygonId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -120,10 +122,14 @@ export function PolygonEditor({
   const [gesture, setGesture] = useState<Gesture>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  // eraser brush radius in screen pixels
+  const [eraserSize, setEraserSize] = useState(ERASER_DEFAULT)
+  const eraseStartRef = useRef<Polygon[] | null>(null)
+  const eraseLastRef = useRef<Point | null>(null)
 
   // undo and redo restore outlines but keep today's names, so renaming in
   // the sidebar or on the canvas is never lost to undoing a later edit
-  const { set: pushHistory, replace: replaceHistory, undo: handleUndo, redo: handleRedo, canUndo, canRedo } = useHistory<Polygon[]>(
+  const { set: pushHistory, undo: handleUndo, redo: handleRedo, canUndo, canRedo } = useHistory<Polygon[]>(
     polygons,
     restored => onPolygonsChange(keepCurrentLabels(restored, polygonsRef.current))
   )
@@ -289,9 +295,7 @@ export function PolygonEditor({
     if (consumeDidPan()) return
     if (!editable) return
 
-    if (editMode === 'straighten') {
-      handleStraightenClick(polyId, pointIdx)
-    } else if (editMode === 'delete-vertex') {
+    if (editMode === 'delete-vertex') {
       const poly = polygons.find(p => p.id === polyId)
       if (!poly || poly.points.length <= 3) return // need at least 3 points
 
@@ -483,39 +487,6 @@ export function PolygonEditor({
     }
   }
 
-  const rawStraightenStep = gesture?.kind === 'straighten' ? gesture.step : null
-  // a completed straighten counts only while its result is still on screen
-  const straightenStep = rawStraightenStep?.kind === 'done' && (gesture?.kind !== 'straighten' || gesture.after !== polygons)
-    ? null
-    : rawStraightenStep
-
-  const handleStraightenClick = (polyId: string, pointIdx: number) => {
-    const poly = polygons.find(p => p.id === polyId)
-    if (!poly) return
-    const { state, points } = straightenClick(straightenStep, polyId, poly.points, pointIdx)
-    let after: Polygon[] | undefined
-    if (points) {
-      after = polygons.map(p => (p.id === polyId ? { ...p, points } : p))
-      updatePolygons(after)
-    }
-    setGesture(state ? { kind: 'straighten', step: state, hover: null, after } : null)
-  }
-
-  // swap the last straighten to the other side, as the same undo step
-  const handleStraightenOtherSide = () => {
-    if (straightenStep?.kind !== 'done') return
-    const current = polygons.find(p => p.id === straightenStep.polyId)
-    const { state, points } = straightenOtherSide(straightenStep, current?.points)
-    let after: Polygon[] | undefined
-    if (points) {
-      // straightenStep is live only while the straighten is the latest history entry
-      after = polygons.map(p => (p.id === straightenStep.polyId ? { ...p, points } : p))
-      replaceHistory(after)
-      onPolygonsChange(after)
-    }
-    setGesture(state ? { kind: 'straighten', step: state, hover: null, after } : null)
-  }
-
   const handleMergeClick = (id: string) => {
     if (gesture?.kind !== 'merge') {
       setGesture({ kind: 'merge', sourceId: id })
@@ -640,9 +611,27 @@ export function PolygonEditor({
     const p = getScaledPoint(e.clientX, e.clientY)
     if (editMode === 'split') setGesture({ kind: 'stroke', points: [p] })
     if (editMode === 'box') setGesture({ kind: 'box', start: p, end: p })
+    if (editMode === 'erase') {
+      eraseStartRef.current = polygonsRef.current
+      eraseLastRef.current = p
+      eraseAlong(p, p)
+      setGesture({ kind: 'erase', cursor: p, pressed: true })
+    }
+  }
+
+  // erases straight into the outlines without history; mouseup records one step
+  const eraseAlong = (a: Point, b: Point) => {
+    const next = erasePoints(polygonsRef.current, a, b, eraserSize * uiScale)
+    if (next === polygonsRef.current) return
+    polygonsRef.current = next
+    onPolygonsChangeRef.current(next)
   }
 
   const handleOverlayMouseMove = (e: React.MouseEvent) => {
+    if (editMode === 'erase' && !(gesture?.kind === 'erase' && gesture.pressed)) {
+      setGesture({ kind: 'erase', cursor: getScaledPoint(e.clientX, e.clientY), pressed: false })
+      return
+    }
     if (gesture?.kind !== 'draw') return
     setGesture({ ...gesture, hover: pointerPoint(e, gesture.points[gesture.points.length - 1]) })
   }
@@ -665,8 +654,8 @@ export function PolygonEditor({
   }
 
   // latest closures for the window listeners below
-  const gestureEndRef = useRef({ runSplit, runTraceRegion, finishDraw })
-  useEffect(() => { gestureEndRef.current = { runSplit, runTraceRegion, finishDraw } })
+  const gestureEndRef = useRef({ runSplit, runTraceRegion, finishDraw, eraseAlong })
+  useEffect(() => { gestureEndRef.current = { runSplit, runTraceRegion, finishDraw, eraseAlong } })
 
   // stroke and box drags track the pointer past the canvas edge
   const dragGesture = gesture?.kind === 'stroke' || gesture?.kind === 'box'
@@ -700,6 +689,44 @@ export function PolygonEditor({
     }
   }, [dragGesture, busy, getScaledPoint, uiScale])
 
+  // an erase drag keeps going past the canvas edge
+  const erasing = gesture?.kind === 'erase' && gesture.pressed
+  useEffect(() => {
+    if (!erasing) return
+    const move = (e: MouseEvent) => {
+      const p = getScaledPoint(e.clientX, e.clientY)
+      // sweep from the last sample so a fast drag misses nothing in between
+      gestureEndRef.current.eraseAlong(eraseLastRef.current ?? p, p)
+      eraseLastRef.current = p
+      setGesture({ kind: 'erase', cursor: p, pressed: true })
+    }
+    const up = () => {
+      if (polygonsRef.current !== eraseStartRef.current) pushHistory(polygonsRef.current)
+      eraseStartRef.current = null
+      eraseLastRef.current = null
+      setGesture(g => (g?.kind === 'erase' ? { ...g, pressed: false } : g))
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+    return () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+  }, [erasing, getScaledPoint, pushHistory])
+
+  // [ and ] resize the eraser brush
+  useEffect(() => {
+    if (editMode !== 'erase') return
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target instanceof Element ? e.target : null
+      if (target?.closest('input, textarea, select, [contenteditable]')) return
+      if (e.key === '[') setEraserSize(size => Math.max(ERASER_MIN, size - 4))
+      if (e.key === ']') setEraserSize(size => Math.min(ERASER_MAX, size + 4))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editMode])
+
   // Escape cancels, Enter finishes a drawing, Backspace takes back its last point
   useEffect(() => {
     if (!editable) return
@@ -730,7 +757,7 @@ export function PolygonEditor({
     setEditMode(mode)
     setGesture(null)
     setNotice(null)
-    if ((mode === 'vertex' || mode === 'add-vertex' || mode === 'delete-vertex' || mode === 'straighten') && !activeId && polygons.length > 0) {
+    if ((mode === 'vertex' || mode === 'add-vertex' || mode === 'delete-vertex') && !activeId && polygons.length > 0) {
       const first = hasInclusion
         ? polygons.find(p => included!.has(p.id))
         : polygons[0]
@@ -774,44 +801,32 @@ export function PolygonEditor({
     modeHint = 'Tracing the boxed object...'
   } else if (gesture?.kind === 'merge') {
     modeHint = 'Click another outline to join it to the highlighted one. Esc to stop'
-  } else if (straightenStep?.kind === 'picking') {
-    modeHint = 'Click the second corner. Red shows the points that will be removed'
-  } else if (straightenStep?.kind === 'done') {
-    modeHint = 'Straightened. Wrong part removed? Click Other side. Or pick two more corners'
   }
   const canvasMode = editable && CANVAS_MODES.includes(editMode)
 
   const toPoints = (pts: Point[]) => pts.map(p => `${p.x},${p.y}`).join(' ')
 
-  function renderStraightenPreview(points: Point[], start: number, hover: number | null) {
-    const from = points[start]
-    if (!from) return null
-    const to = hover !== null ? points[hover] : undefined
-    const removed = hover !== null ? straightenRemoval(points, start, hover) : []
-    // removal runs forward from whichever endpoint precedes it
-    const path = removed.length === 0 ? [] : removed[0] === (start + 1) % points.length
-      ? [start, ...removed, hover!]
-      : [hover!, ...removed, start]
-    return (
-      <g className="pointer-events-none">
-        {path.length > 0 && (
-          <polyline
-            points={toPoints(path.map(i => points[i]))}
-            fill="none"
-            stroke="rgb(239, 68, 68)"
-            strokeWidth={uiScale * 3}
-            strokeDasharray={`${uiScale * 4} ${uiScale * 3}`}
-          />
-        )}
-        {to && (
-          <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="rgb(34, 197, 94)" strokeWidth={uiScale * 2.5} />
-        )}
-        <circle cx={from.x} cy={from.y} r={uiScale * 12} fill="none" stroke="rgb(245, 158, 11)" strokeWidth={uiScale * 2.5} />
-      </g>
-    )
-  }
-
   function renderGesturePreview() {
+    if (editMode === 'erase') {
+      return (
+        <g className="pointer-events-none">
+          {/* every point is a target, so show them all */}
+          {polygons.flatMap(poly => [poly.points, ...poly.interior_rings].flatMap((ring, r) => ring.map((p, i) => (
+            <circle key={`${poly.id}-${r}-${i}`} cx={p.x} cy={p.y} r={uiScale * 2.5} fill="rgb(72, 168, 214)" />
+          ))))}
+          {gesture?.kind === 'erase' && (
+            <circle
+              cx={gesture.cursor.x}
+              cy={gesture.cursor.y}
+              r={eraserSize * uiScale}
+              fill={gesture.pressed ? 'rgba(239, 68, 68, 0.25)' : 'rgba(239, 68, 68, 0.12)'}
+              stroke="rgb(239, 68, 68)"
+              strokeWidth={uiScale * 1.5}
+            />
+          )}
+        </g>
+      )
+    }
     if (gesture?.kind === 'stroke') {
       return (
         <polyline
@@ -871,8 +886,23 @@ export function PolygonEditor({
               'data-delete-shortcut': true,
               disabled: activePoly && activePoly.points.length <= 3,
             })}
-            {modeButton('straighten', <Slash className="w-5 h-5" />, 'Straighten between two corners')}
+            {modeButton('erase', <Eraser className="w-5 h-5" />, 'Erase points')}
           </div>
+
+          {editMode === 'erase' && (
+            <label className="flex items-center gap-2 text-xs text-text-muted">
+              Brush
+              <input
+                type="range"
+                min={ERASER_MIN}
+                max={ERASER_MAX}
+                value={eraserSize}
+                onChange={e => setEraserSize(Number(e.target.value))}
+                className="w-24 accent-accent"
+                aria-label="Eraser size"
+              />
+            </label>
+          )}
 
           <div className="flex gap-1 bg-elevated rounded-[10px] p-1 border border-border">
             {onSplit && modeButton('split', <Scissors className="w-5 h-5" />, 'Split an outline')}
@@ -1037,13 +1067,7 @@ export function PolygonEditor({
                         cy={point.y}
                         r={uiScale * 16}
                         fill="transparent"
-                        className={editMode === 'delete-vertex' || editMode === 'straighten' ? 'cursor-pointer touch-none' : 'cursor-move touch-none'}
-                        onMouseEnter={straightenStep?.kind === 'picking' && straightenStep.polyId === poly.id
-                          ? () => setGesture({ kind: 'straighten', step: straightenStep, hover: idx })
-                          : undefined}
-                        onMouseLeave={editMode === 'straighten' && gesture?.kind === 'straighten'
-                          ? () => setGesture(g => (g?.kind === 'straighten' ? { ...g, hover: null } : g))
-                          : undefined}
+                        className={editMode === 'delete-vertex' ? 'cursor-pointer touch-none' : 'cursor-move touch-none'}
                         onMouseDown={editMode !== 'delete-vertex' ? handleVertexMouseDown(poly.id, idx) : undefined}
                         onTouchStart={editMode !== 'delete-vertex' ? handleVertexTouchStart(poly.id, idx) : undefined}
                         onClick={handleVertexClick(poly.id, idx)}
@@ -1060,8 +1084,6 @@ export function PolygonEditor({
                     </g>
                   ))}
 
-                {gesture?.kind === 'straighten' && gesture.step.kind === 'picking' && gesture.step.polyId === poly.id
-                  && renderStraightenPreview(poly.points, gesture.step.start, gesture.hover)}
               </g>
             )
           })}
@@ -1073,26 +1095,15 @@ export function PolygonEditor({
               width={imageSize.width}
               height={imageSize.height}
               fill="transparent"
-              className="cursor-crosshair"
+              className={editMode === 'erase' ? 'cursor-none' : 'cursor-crosshair'}
               onMouseDown={handleOverlayMouseDown}
+              onMouseLeave={() => { if (gesture?.kind === 'erase' && !gesture.pressed) setGesture(null) }}
               onMouseMove={handleOverlayMouseMove}
               onClick={handleOverlayClick}
               onDoubleClick={handleOverlayDoubleClick}
             />
           )}
           {renderGesturePreview()}
-          {straightenStep?.kind === 'done' && (() => {
-            const from = straightenStep.before[straightenStep.a]
-            const to = straightenStep.before[straightenStep.b]
-            return (
-              <line
-                x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-                stroke="rgb(34, 197, 94)"
-                strokeWidth={uiScale * 3}
-                className="pointer-events-none"
-              />
-            )
-          })()}
         </svg>
 
         {showLabels && (
@@ -1106,33 +1117,6 @@ export function PolygonEditor({
             interactive={editable && (editMode === 'select' || editMode === 'vertex') && !dragging}
           />
         )}
-
-        {straightenStep?.kind === 'done' && (() => {
-          const from = straightenStep.before[straightenStep.a]
-          const to = straightenStep.before[straightenStep.b]
-          // keep the control on the canvas: clamp sideways, drop below the edge near the top
-          const left = Math.min(90, Math.max(10, (((from.x + to.x) / 2 - vb.x) / vb.w) * 100))
-          const rawTop = (((from.y + to.y) / 2 - vb.y) / vb.h) * 100
-          const below = rawTop < 12
-          const top = Math.min(95, Math.max(below ? 0 : 5, rawTop))
-          return (
-            <div
-              className={`absolute -translate-x-1/2 z-10 ${below ? 'translate-y-[10px]' : '-translate-y-[calc(100%+10px)]'}`}
-              style={{ left: `${left}%`, top: `${top}%` }}
-              onClick={e => e.stopPropagation()}
-              onMouseDown={e => e.stopPropagation()}
-            >
-              <button
-                type="button"
-                onClick={handleStraightenOtherSide}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-surface text-text-primary border border-border shadow-lg hover:bg-elevated"
-              >
-                <ArrowLeftRight className="w-3.5 h-3.5" />
-                Other side
-              </button>
-            </div>
-          )
-        })()}
 
         {/* zoom controls */}
         <div

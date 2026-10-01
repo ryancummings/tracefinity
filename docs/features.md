@@ -23,7 +23,7 @@ Reference for AI agents. Check here before suggesting new features or claiming s
 ## Polygon Editing
 
 - Vertex add/remove/drag
-- Straighten: click two corners to replace the wobbly trace between them with one straight edge. It removes the shorter section; an Other side button on the photo swaps to the longer one as the same undo step. Each straighten is exactly two clicks
+- Point eraser: drag a round brush over an outline to delete the points under it; the points either side join with a straight line, which straightens a wobbly traced edge. Brush size is a slider or `[` / `]`; one drag is one undo step. Outlines keep at least three points; a hole the brush wipes out is removed
 - Tool names shown on the photo during tracing; click a name to rename it in place
 - Split an outline by dragging a cut across it (Shift for a straight cut)
 - Merge outlines by clicking them in turn (small gaps are bridged)
