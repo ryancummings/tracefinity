@@ -35,7 +35,9 @@ const HALO_STROKE = 'rgba(2, 6, 23, 0.55)'
 type EditMode = 'select' | 'vertex' | 'add-vertex' | 'delete-vertex' | 'straighten' | 'split' | 'merge' | 'draw' | 'box'
 // in-progress multi-step input for the outline tools
 type Gesture =
-  | { kind: 'straighten'; step: NonNullable<StraightenState>; hover: number | null }
+  // `after` is the outline set a completed straighten produced; any other
+  // edit, undo or redo replaces it, which retires the Other side control
+  | { kind: 'straighten'; step: NonNullable<StraightenState>; hover: number | null; after?: Polygon[] }
   | { kind: 'stroke'; points: Point[] }
   | { kind: 'box'; start: Point; end: Point }
   | { kind: 'draw'; points: Point[]; hover: Point | null }
@@ -481,14 +483,22 @@ export function PolygonEditor({
     }
   }
 
-  const straightenStep = gesture?.kind === 'straighten' ? gesture.step : null
+  const rawStraightenStep = gesture?.kind === 'straighten' ? gesture.step : null
+  // a completed straighten counts only while its result is still on screen
+  const straightenStep = rawStraightenStep?.kind === 'done' && (gesture?.kind !== 'straighten' || gesture.after !== polygons)
+    ? null
+    : rawStraightenStep
 
   const handleStraightenClick = (polyId: string, pointIdx: number) => {
     const poly = polygons.find(p => p.id === polyId)
     if (!poly) return
     const { state, points } = straightenClick(straightenStep, polyId, poly.points, pointIdx)
-    if (points) updatePolygons(polygons.map(p => (p.id === polyId ? { ...p, points } : p)))
-    setGesture(state ? { kind: 'straighten', step: state, hover: null } : null)
+    let after: Polygon[] | undefined
+    if (points) {
+      after = polygons.map(p => (p.id === polyId ? { ...p, points } : p))
+      updatePolygons(after)
+    }
+    setGesture(state ? { kind: 'straighten', step: state, hover: null, after } : null)
   }
 
   // swap the last straighten to the other side, as the same undo step
@@ -496,12 +506,14 @@ export function PolygonEditor({
     if (straightenStep?.kind !== 'done') return
     const current = polygons.find(p => p.id === straightenStep.polyId)
     const { state, points } = straightenOtherSide(straightenStep, current?.points)
+    let after: Polygon[] | undefined
     if (points) {
-      const next = polygons.map(p => (p.id === straightenStep.polyId ? { ...p, points } : p))
-      replaceHistory(next)
-      onPolygonsChange(next)
+      // straightenStep is live only while the straighten is the latest history entry
+      after = polygons.map(p => (p.id === straightenStep.polyId ? { ...p, points } : p))
+      replaceHistory(after)
+      onPolygonsChange(after)
     }
-    setGesture(state ? { kind: 'straighten', step: state, hover: null } : null)
+    setGesture(state ? { kind: 'straighten', step: state, hover: null, after } : null)
   }
 
   const handleMergeClick = (id: string) => {
@@ -1098,11 +1110,14 @@ export function PolygonEditor({
         {straightenStep?.kind === 'done' && (() => {
           const from = straightenStep.before[straightenStep.a]
           const to = straightenStep.before[straightenStep.b]
-          const left = (((from.x + to.x) / 2 - vb.x) / vb.w) * 100
-          const top = (((from.y + to.y) / 2 - vb.y) / vb.h) * 100
+          // keep the control on the canvas: clamp sideways, drop below the edge near the top
+          const left = Math.min(90, Math.max(10, (((from.x + to.x) / 2 - vb.x) / vb.w) * 100))
+          const rawTop = (((from.y + to.y) / 2 - vb.y) / vb.h) * 100
+          const below = rawTop < 12
+          const top = Math.min(95, Math.max(below ? 0 : 5, rawTop))
           return (
             <div
-              className="absolute -translate-x-1/2 -translate-y-[calc(100%+10px)] z-10"
+              className={`absolute -translate-x-1/2 z-10 ${below ? 'translate-y-[10px]' : '-translate-y-[calc(100%+10px)]'}`}
               style={{ left: `${left}%`, top: `${top}%` }}
               onClick={e => e.stopPropagation()}
               onMouseDown={e => e.stopPropagation()}
