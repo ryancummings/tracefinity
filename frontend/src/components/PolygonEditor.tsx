@@ -461,6 +461,8 @@ export function PolygonEditor({
   useEffect(() => { onIncludedChangeRef.current = onIncludedChange }, [onIncludedChange])
   useEffect(() => { updatePolygonsRef.current = updatePolygons }, [updatePolygons])
   useEffect(() => { pushHistoryRef.current = pushHistory }, [pushHistory])
+  const scaledPointRef = useRef(getScaledPoint)
+  useEffect(() => { scaledPointRef.current = getScaledPoint }, [getScaledPoint])
 
   // new outlines join the save selection; ids read from refs because the
   // async operations finish after the render that started them
@@ -705,7 +707,7 @@ export function PolygonEditor({
     eraseStartRef.current ??= polygonsRef.current
     const move = (e: PointerEvent) => {
       if (!e.isPrimary) return
-      const p = getScaledPoint(e.clientX, e.clientY)
+      const p = scaledPointRef.current(e.clientX, e.clientY)
       // sweep from the last sample so a fast drag misses nothing in between
       gestureEndRef.current.eraseAlong(eraseLastRef.current ?? p, p)
       eraseLastRef.current = p
@@ -715,7 +717,7 @@ export function PolygonEditor({
     // finish the sweep at the release point, which may not have had a move event
     const up = (e: PointerEvent) => {
       if (!e.isPrimary) return
-      const p = getScaledPoint(e.clientX, e.clientY)
+      const p = scaledPointRef.current(e.clientX, e.clientY)
       gestureEndRef.current.eraseAlong(eraseLastRef.current ?? p, p)
       end()
     }
@@ -741,8 +743,9 @@ export function PolygonEditor({
       eraseStartRef.current = null
       eraseLastRef.current = null
     }
-    // pushHistory is read through a ref: a new identity must not end the stroke
-  }, [erasing, getScaledPoint])
+    // pushHistory and the point mapping are read through refs: a new
+    // identity (after a history change or a zoom) must not end the stroke
+  }, [erasing])
 
   // [ and ] resize the eraser brush
   useEffect(() => {
