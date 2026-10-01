@@ -126,6 +126,7 @@ export function PolygonEditor({
   const [eraserSize, setEraserSize] = useState(ERASER_DEFAULT)
   const eraseStartRef = useRef<Polygon[] | null>(null)
   const eraseLastRef = useRef<Point | null>(null)
+  const pushHistoryRef = useRef<(value: Polygon[]) => void>(() => {})
 
   // undo and redo restore outlines but keep today's names, so renaming in
   // the sidebar or on the canvas is never lost to undoing a later edit
@@ -459,6 +460,7 @@ export function PolygonEditor({
   useEffect(() => { includedRef.current = included }, [included])
   useEffect(() => { onIncludedChangeRef.current = onIncludedChange }, [onIncludedChange])
   useEffect(() => { updatePolygonsRef.current = updatePolygons }, [updatePolygons])
+  useEffect(() => { pushHistoryRef.current = pushHistory }, [pushHistory])
 
   // new outlines join the save selection; ids read from refs because the
   // async operations finish after the render that started them
@@ -709,21 +711,38 @@ export function PolygonEditor({
       eraseLastRef.current = p
       setGesture({ kind: 'erase', cursor: p, pressed: true })
     }
-    const up = () => setGesture(g => (g?.kind === 'erase' ? { ...g, pressed: false } : g))
+    const end = () => setGesture(g => (g?.kind === 'erase' ? { ...g, pressed: false } : g))
+    // finish the sweep at the release point, which may not have had a move event
+    const up = (e: PointerEvent) => {
+      if (!e.isPrimary) return
+      const p = getScaledPoint(e.clientX, e.clientY)
+      gestureEndRef.current.eraseAlong(eraseLastRef.current ?? p, p)
+      end()
+    }
+    // undo or redo mid-drag would rewrite history under the stroke
+    const blockHistoryKeys = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+      }
+    }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
-    window.addEventListener('pointercancel', up)
+    window.addEventListener('pointercancel', end)
+    window.addEventListener('keydown', blockHistoryKeys, { capture: true })
     return () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
-      window.removeEventListener('pointercancel', up)
+      window.removeEventListener('pointercancel', end)
+      window.removeEventListener('keydown', blockHistoryKeys, { capture: true })
       // however the drag ends (release, Escape, a mode switch), what it
       // erased becomes one undo step rather than an unrecorded change
-      if (eraseStartRef.current && polygonsRef.current !== eraseStartRef.current) pushHistory(polygonsRef.current)
+      if (eraseStartRef.current && polygonsRef.current !== eraseStartRef.current) pushHistoryRef.current(polygonsRef.current)
       eraseStartRef.current = null
       eraseLastRef.current = null
     }
-  }, [erasing, getScaledPoint, pushHistory])
+    // pushHistory is read through a ref: a new identity must not end the stroke
+  }, [erasing, getScaledPoint])
 
   // [ and ] resize the eraser brush
   useEffect(() => {
@@ -927,7 +946,7 @@ export function PolygonEditor({
           <div className="flex items-center gap-1">
             <button
               onClick={handleUndo}
-              disabled={!canUndo}
+              disabled={!canUndo || erasing}
               className="p-2 rounded hover:bg-border text-text-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               title="Undo (Ctrl+Z)"
             >
@@ -935,7 +954,7 @@ export function PolygonEditor({
             </button>
             <button
               onClick={handleRedo}
-              disabled={!canRedo}
+              disabled={!canRedo || erasing}
               className="p-2 rounded hover:bg-border text-text-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               title="Redo (Ctrl+Shift+Z)"
             >
