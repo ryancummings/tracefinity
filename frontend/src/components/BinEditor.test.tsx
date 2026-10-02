@@ -82,6 +82,26 @@ describe('bin cutouts', () => {
     localStorage.removeItem('tracefinity-settings')
   })
 
+  it('places a cutout without crypto.randomUUID, as over plain HTTP', () => {
+    vi.stubGlobal('crypto', {})
+    const onPlacedToolsChange = vi.fn()
+    const tool = {
+      id: 'placed', tool_id: 'source', name: 'Tool', rotation: 0,
+      points: [{ x: 15, y: 15 }, { x: 35, y: 15 }, { x: 35, y: 35 }, { x: 15, y: 35 }],
+      finger_holes: [], interior_rings: [],
+    }
+    render(<BinEditor {...baseProps} placedTools={[tool]} onPlacedToolsChange={onPlacedToolsChange} />)
+    const canvas = screen.getByTestId('bin-canvas')
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 742, height: 702 } as DOMRect)
+    fireEvent.click(screen.getByTitle('Add cutout to a tool'))
+    fireEvent.click(canvas.querySelector('path')!, { clientX: 210, clientY: 210 })
+    fireEvent.click(canvas, { clientX: 370, clientY: 210 })
+    expect(onPlacedToolsChange).toHaveBeenCalledWith([
+      expect.objectContaining({ finger_holes: [expect.objectContaining({ id: expect.stringMatching(/^bin-fh-/), x: 45, y: 25 })] }),
+    ])
+    vi.unstubAllGlobals()
+  })
+
   it('edits the selected cutout diameter and keeps ownership visible', () => {
     const tool = {
       id: 'placed', tool_id: 'source', name: 'Wrench', rotation: 0,
