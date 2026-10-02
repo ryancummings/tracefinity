@@ -52,6 +52,13 @@ type DragState =
   | { type: 'resize-hole'; toolId: string; holeId: string; centerX: number; centerY: number }
   | null
 
+// crypto.randomUUID exists only in secure contexts; the LAN deployment is plain HTTP.
+function newCutoutId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
+
 export function BinEditor({
   placedTools,
   oversizedToolIds,
@@ -483,7 +490,7 @@ export function BinEditor({
       const tool = placedTools.find(t => t.id === cutoutToolId)
       if (!tool) return
       const hole: FingerHole = {
-        id: `bin-fh-${crypto.randomUUID()}`,
+        id: `bin-fh-${newCutoutId()}`,
         x: snapToGrid(pos.x), y: snapToGrid(pos.y), rotation: 0,
         ...getCutoutDefaults(cutoutShape), shape: cutoutShape, bin_override: true,
       }
