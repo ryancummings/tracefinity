@@ -1138,6 +1138,7 @@ def _load_font(size_px: int):
     candidates = [
         "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
         "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/Library/Fonts/Arial.ttf",

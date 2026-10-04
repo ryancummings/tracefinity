@@ -298,7 +298,8 @@ export function BinEditorCanvas({
                     fill={isSelected ? 'rgb(13, 148, 136)' : 'rgb(20, 184, 166)'}
                     stroke={isSelected ? 'rgb(13, 148, 136)' : 'none'}
                     strokeWidth={isSelected ? 0.5 : 0}
-                    fontSize={fontSize} fontWeight="600" fontFamily="Arial, sans-serif"
+                    // the generator cuts regular-weight Arial or its metric twin Liberation Sans
+                    fontSize={fontSize} fontWeight="400" fontFamily="Arial, 'Liberation Sans', sans-serif"
                     className="pointer-events-none"
                   >
                     {label.text}
