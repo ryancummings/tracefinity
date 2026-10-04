@@ -8,6 +8,7 @@ import { DISPLAY_SCALE } from '@/lib/constants'
 import { isRectangularCutout } from '@/lib/cutouts'
 import { CutoutOverlay } from '@/components/CutoutOverlay'
 import type { EditMode, Selection } from '@/components/ToolEditorToolbar'
+import type { EraserBrush } from '@/hooks/useOutlineEraser'
 
 interface Props {
   svgRef: RefObject<SVGSVGElement | null>
@@ -53,6 +54,12 @@ interface Props {
   // symmetric editing
   symmetryAxis?: SymmetryAxis | null
   onAxisMouseDown?: (e: React.MouseEvent) => void
+
+  // point eraser
+  eraserBrush?: EraserBrush | null
+  onEraserPointerDown?: (e: React.PointerEvent) => void
+  onEraserPointerMove?: (e: React.PointerEvent) => void
+  onEraserPointerLeave?: () => void
 }
 
 export function ToolEditorCanvas({
@@ -66,7 +73,9 @@ export function ToolEditorCanvas({
   handleRotatePolygonMouseDown, onRingClick,
   sourceImageContext, showSourceImage, sourceImageOpacity,
   symmetryAxis, onAxisMouseDown,
+  eraserBrush, onEraserPointerDown, onEraserPointerMove, onEraserPointerLeave,
 }: Props) {
+  const erasing = editMode === 'erase'
   const stopClick = (e: React.MouseEvent) => e.stopPropagation()
   const [hoveredRing, setHoveredRing] = useState<number | null>(null)
   const sourceImage = sourceImageContext && showSourceImage ? (() => {
@@ -89,10 +98,13 @@ export function ToolEditorCanvas({
           ref={svgRef}
           viewBox={`${zvbX} ${zvbY} ${zvbW} ${zvbH}`}
           preserveAspectRatio="xMidYMid meet"
-          className={`w-full h-full ${isCutoutMode ? 'cursor-crosshair' : 'cursor-default'}`}
+          className={`w-full h-full ${erasing ? 'cursor-none touch-none' : isCutoutMode ? 'cursor-crosshair' : 'cursor-default'}`}
           style={{ overflow: 'hidden', backgroundColor: 'var(--color-inset)' }}
           onClick={handleBackgroundClick}
           onMouseDown={handleSvgMouseDown}
+          onPointerDown={onEraserPointerDown}
+          onPointerMove={onEraserPointerMove}
+          onPointerLeave={onEraserPointerLeave}
         >
           {/* background fill */}
           <rect x={zvbX} y={zvbY} width={zvbW} height={zvbH} fill="var(--color-inset)" />
@@ -217,6 +229,27 @@ export function ToolEditorCanvas({
               </g>
             )
           })}
+
+          {/* point eraser: every point is a target, so show them all */}
+          {erasing && !smoothed && (
+            <g className="pointer-events-none" data-testid="eraser-points">
+              {[displayPoints, ...(interiorRings ?? [])].flatMap((ring, r) => ring.map((p, i) => (
+                <circle key={`e-${r}-${i}`} cx={p.x * DISPLAY_SCALE} cy={p.y * DISPLAY_SCALE} r={3 * zvbW / 800} fill="rgb(72, 168, 214)" />
+              )))}
+            </g>
+          )}
+          {erasing && eraserBrush && (
+            <circle
+              data-testid="eraser-brush"
+              cx={eraserBrush.x * DISPLAY_SCALE}
+              cy={eraserBrush.y * DISPLAY_SCALE}
+              r={eraserBrush.r * DISPLAY_SCALE}
+              fill={eraserBrush.pressed ? 'rgba(239, 68, 68, 0.25)' : 'rgba(239, 68, 68, 0.12)'}
+              stroke="rgb(239, 68, 68)"
+              strokeWidth={1.5 * zvbW / 800}
+              className="pointer-events-none"
+            />
+          )}
 
           {/* vertex handles (hidden when smoothed) */}
           {!smoothed && (editMode === 'select' || editMode === 'add-vertex' || editMode === 'delete-vertex') && displayPoints.map((p, idx) => (

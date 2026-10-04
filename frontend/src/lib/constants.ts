@@ -51,3 +51,8 @@ export function maxGridUnitsForOtherAxis(otherAxis: number): number {
   const otherCells = Math.max(1, Math.ceil(otherAxis))
   return Math.min(MAX_GRID_UNITS, Math.floor(MAX_GRID_CELLS / otherCells))
 }
+
+// point-eraser brush radius in screen pixels
+export const ERASER_MIN = 4
+export const ERASER_MAX = 60
+export const ERASER_DEFAULT = 16

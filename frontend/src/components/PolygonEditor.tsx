@@ -9,7 +9,7 @@ import { OutlineLabels } from '@/components/OutlineLabels'
 import { ApiError } from '@/lib/api'
 import { useHistory } from '@/hooks/useHistory'
 import { useDeleteShortcut } from '@/hooks/useDeleteShortcut'
-import { ZOOM_FACTOR } from '@/lib/constants'
+import { ERASER_DEFAULT, ERASER_MAX, ERASER_MIN, ZOOM_FACTOR } from '@/lib/constants'
 import { clampZoom, zoomedViewBox, viewBoxPoint, zoomAtCursor, uiScaleFor } from '@/lib/viewbox'
 
 interface Props {
@@ -57,10 +57,6 @@ const MODE_HINTS: Record<EditMode, string> = {
   draw: 'Click around the object. Click the first point or press Enter to finish; Shift snaps to 45°',
   box: 'Drag a box around a missed object to trace it',
 }
-
-const ERASER_MIN = 4
-const ERASER_MAX = 60
-const ERASER_DEFAULT = 16
 
 function newPolygonId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID

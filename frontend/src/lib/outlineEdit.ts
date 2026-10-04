@@ -190,7 +190,7 @@ export function createTraceGeneration() {
  * points, while a hole that would be is removed. Unchanged outlines, and
  * the array itself when nothing was erased, keep their identity.
  */
-export function erasePoints(polygons: Polygon[], a: Point, b: Point, radius: number): Polygon[] {
+export function erasePoints<T extends Pick<Polygon, 'points' | 'interior_rings'>>(polygons: T[], a: Point, b: Point, radius: number): T[] {
   const survivors = (ring: Point[]) => ring.filter(p => distToSegment(p, a, b) > radius)
   let changed = false
   const next = polygons.map(poly => {

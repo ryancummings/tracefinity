@@ -1,10 +1,10 @@
 'use client'
 
 import { ReactNode } from 'react'
-import { MousePointer2, Plus, Minus, Undo2, Redo2, Trash2, Circle, Disc, Square, RectangleHorizontal, Fingerprint, Magnet, RotateCw, RotateCcw, FlipHorizontal2, FlipVertical2, ChevronDown, PaintBucket, Locate, Columns2, Rows2, ArrowLeftRight, Waypoints } from 'lucide-react'
+import { MousePointer2, Plus, Minus, Eraser, Undo2, Redo2, Trash2, Circle, Disc, Square, RectangleHorizontal, Fingerprint, Magnet, RotateCw, RotateCcw, FlipHorizontal2, FlipVertical2, ChevronDown, PaintBucket, Locate, Columns2, Rows2, ArrowLeftRight, Waypoints } from 'lucide-react'
 import type { AxisOrientation, KeepSide } from '@/lib/symmetry'
 import type { CutoutShape, FingerHole } from '@/types'
-import { SNAP_GRID_MIN, SNAP_GRID_MAX } from '@/lib/constants'
+import { ERASER_MAX, ERASER_MIN, SNAP_GRID_MIN, SNAP_GRID_MAX } from '@/lib/constants'
 import { NumericInput } from '@/components/NumericInput'
 import { getCutoutDefaults } from '@/lib/settings'
 
@@ -13,7 +13,7 @@ function savedCutoutSize(shape: CutoutShape): string {
   return size.width && size.height ? `${size.width}×${size.height}mm` : `${size.radius * 2}mm`
 }
 
-export type EditMode = 'select' | 'add-vertex' | 'delete-vertex' | 'finger-hole' | 'circle' | 'cylinder' | 'square' | 'rectangle' | 'filleted_rectangle' | 'fill-ring'
+export type EditMode = 'select' | 'add-vertex' | 'delete-vertex' | 'erase' | 'finger-hole' | 'circle' | 'cylinder' | 'square' | 'rectangle' | 'filleted_rectangle' | 'fill-ring'
 
 export type Selection =
   | { type: 'vertex'; pointIdx: number }
@@ -62,6 +62,9 @@ interface Props {
   onAutoRotate?: () => void
   autoRotating?: boolean
   hasInteriorRings: boolean
+  eraseDisabled: boolean
+  eraserSize: number
+  setEraserSize: (size: number) => void
 }
 
 export function ToolEditorToolbar({
@@ -75,7 +78,9 @@ export function ToolEditorToolbar({
   isCutoutMode, cutoutModeIcon, cutoutModeLabel,
   selection, selectedHole, handleDeleteHole,
   displayPointsCount, rotateAll, flipAll, onAutoRotate, autoRotating, hasInteriorRings,
+  eraseDisabled, eraserSize, setEraserSize,
 }: Props) {
+  const eraseUnavailable = previewSmoothed || eraseDisabled
   return (
     <>
       <div className="flex flex-wrap items-center justify-center gap-2">
@@ -114,6 +119,34 @@ export function ToolEditorToolbar({
             <Minus className="w-4 h-4" />
             Remove
           </button>
+          <button
+            onClick={() => setEditMode('erase')}
+            className={`px-2.5 py-1 rounded-[7px] text-[11px] font-medium flex items-center gap-1.5 transition-colors ${
+              eraseUnavailable ? 'opacity-30 cursor-not-allowed text-text-muted' : editMode === 'erase' ? 'bg-accent-muted text-accent' : 'hover:bg-border/50 text-text-secondary'
+            }`}
+            title={previewSmoothed ? 'Switch to Accurate view to erase points'
+              : eraseDisabled ? 'Turn off Mirror to erase points'
+              : 'Erase points: drag over the outline to delete the points under the brush. [ and ] resize it'}
+            aria-pressed={editMode === 'erase'}
+            disabled={eraseUnavailable}
+          >
+            <Eraser className="w-4 h-4" />
+            Erase
+          </button>
+          {editMode === 'erase' && !eraseUnavailable && (
+            <label className="px-1.5 flex items-center gap-1.5 text-[11px] text-text-muted">
+              Brush
+              <input
+                type="range"
+                min={ERASER_MIN}
+                max={ERASER_MAX}
+                value={eraserSize}
+                onChange={e => setEraserSize(Number(e.target.value))}
+                className="w-16 h-1 accent-accent"
+                aria-label="Eraser size"
+              />
+            </label>
+          )}
           <div className="relative">
             <button
               onClick={() => setCutoutOpen(prev => !prev)}
