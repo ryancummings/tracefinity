@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { MIN_CUTOUT_SIZE_MM, resizeRectCutout, resizeRoundCutout } from './cutouts'
+import { MIN_CUTOUT_SIZE_MM, cutoutOverlapsOutline, resizeRectCutout, resizeRoundCutout } from './cutouts'
 
 // guards issue #114: rectangle cutouts must resize below 10mm
 describe('resizeRectCutout', () => {
@@ -60,5 +60,32 @@ describe('MIN_CUTOUT_SIZE_MM', () => {
   it('is well below the reported 10mm floor', () => {
     expect(MIN_CUTOUT_SIZE_MM).toBeLessThanOrEqual(5)
     expect(MIN_CUTOUT_SIZE_MM).toBeGreaterThan(0)
+  })
+})
+
+describe('cutoutOverlapsOutline', () => {
+  const outline = [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }, { x: 0, y: 20 }]
+
+  it('finds a cutout centred in the pocket or only reaching into it', () => {
+    expect(cutoutOverlapsOutline({ id: 'a', x: 10, y: 10, radius: 3, shape: 'scoop' }, outline)).toBe(true)
+    expect(cutoutOverlapsOutline({ id: 'b', x: 23, y: 10, radius: 4, shape: 'circle' }, outline)).toBe(true)
+    expect(cutoutOverlapsOutline({ id: 'c', x: 26, y: 10, radius: 4, shape: 'circle' }, outline)).toBe(false)
+  })
+
+  it('follows a rectangle cutout’s rotation', () => {
+    // 30x4 bar centred 14mm right of the pocket: lying flat it reaches 1mm in, upright it does not
+    const bar = { id: 'r', x: 34, y: 10, radius: 15, width: 30, height: 4, shape: 'rectangle' as const }
+    expect(cutoutOverlapsOutline(bar, outline)).toBe(true)
+    expect(cutoutOverlapsOutline({ ...bar, rotation: 90 }, outline)).toBe(false)
+  })
+
+  it('treats an interior ring as material, not pocket', () => {
+    const island = [{ x: 5, y: 5 }, { x: 15, y: 5 }, { x: 15, y: 15 }, { x: 5, y: 15 }]
+    expect(cutoutOverlapsOutline({ id: 'i', x: 10, y: 10, radius: 3, shape: 'cylinder' }, outline, [island])).toBe(false)
+  })
+
+  it('finds a thin outline that a wide cutout swallows whole', () => {
+    const sliver = [{ x: 9, y: 9 }, { x: 11, y: 9 }, { x: 11, y: 11 }, { x: 9, y: 11 }]
+    expect(cutoutOverlapsOutline({ id: 'w', x: 10, y: 12, radius: 6, shape: 'square' }, sliver)).toBe(true)
   })
 })

@@ -644,7 +644,7 @@ export function BinEditor({
       )}
       {selectedHole && selectedHoleTool && activeTool === 'select' && (
         <BinCutoutInspector
-          hole={selectedHole} tool={selectedHoleTool} binDepth={defaultCutoutDepth} maxDepth={maxCutoutDepth}
+          hole={selectedHole} tool={selectedHoleTool} placedTools={placedTools} binDepth={defaultCutoutDepth} maxDepth={maxCutoutDepth}
           onUpdate={updateSelectedHole} onDepthChange={d => setHoleDepthOverride(selectedHoleTool.id, selectedHole.id, d)} onRemove={removeSelectedHole}
         />
       )}

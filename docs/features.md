@@ -50,7 +50,8 @@ Reference for AI agents. Check here before suggesting new features or claiming s
 - Rectangle mode (30x20mm default)
 - Drag to move, corner handles to resize
 - Rotation handle on rectangular cutouts
-- Per-hole depth override
+- Per-hole depth override, with a button per tool pocket the cutout reaches into to match that pocket's depth (its own tool's by inheriting, so it follows later changes; another tool's by copying)
+- Per-tool pocket depth in the bin editor, with a Max button for the deepest the bin allows
 - Delete individual holes
 
 ## Bin Configuration

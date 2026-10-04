@@ -25,10 +25,18 @@ export function BinToolInspector({ tool, binDepth, maxDepth, smoothed, smoothLev
   return (
     <BinInspectorPanel label="Tool settings" title={tool.name}>
       <p className="text-[11px] text-text-muted mb-3">Settings for this tool in this bin.</p>
-      <label className="flex items-center justify-between text-xs gap-2">Tool pocket depth (mm)
-        <NumericInput value={effectiveDepth} min={Math.min(5, maxDepth)} max={maxDepth} step={0.25}
-          onChange={onDepthChange} className="w-16 rounded bg-elevated px-2 py-1 text-right text-xs text-text-primary border border-border-subtle" />
-      </label>
+      <div className="flex items-center gap-1.5">
+        <label className="flex flex-1 items-center justify-between text-xs gap-2">Tool pocket depth (mm)
+          <NumericInput value={effectiveDepth} min={Math.min(5, maxDepth)} max={maxDepth} step={0.25}
+            onChange={onDepthChange} className="w-16 rounded bg-elevated px-2 py-1 text-right text-xs text-text-primary border border-border-subtle" />
+        </label>
+        <button
+          onClick={() => onDepthChange(maxDepth)}
+          disabled={effectiveDepth >= maxDepth}
+          title={`Deepest this bin allows: ${maxDepth.toFixed(2)} mm`}
+          className="rounded border border-border-subtle px-1.5 py-1 text-xs text-accent disabled:opacity-40 disabled:text-text-muted"
+        >Max</button>
+      </div>
       <p className="text-[11px] text-text-muted mt-1">The pocket under this tool. Bin default: {defaultDepth.toFixed(2)} mm.</p>
       <p className="mt-1 text-xs font-semibold text-text-primary">Maximum for this bin: {maxDepth.toFixed(2)} mm</p>
       {tool.depth_override != null && <button className="mt-1 text-xs text-accent" onClick={() => onDepthChange(null)}>Use bin default</button>}
