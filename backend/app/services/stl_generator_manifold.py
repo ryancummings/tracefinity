@@ -990,13 +990,25 @@ def _make_finger_holes(
             try:
                 if shape == 'circle':
                     r = fh.radius_mm
-                    pocket_floor_z = wall_top_z - pocket_depth
-                    sphere_z = max(wall_top_z, pocket_floor_z + r)
-                    # approximate sphere as a cylinder with hemispheric top
-                    # using a simple cylinder for speed; close enough for slicer
-                    cutter = mf.Manifold.sphere(r, circular_segments=ROUND_SEGS).translate(
-                        (fh_x, fh_y, sphere_z)
-                    )
+                    if pocket_depth < r:
+                        # A radius-r sphere this shallow would open narrower than
+                        # the drawn circle. Use the larger sphere whose cap is
+                        # exactly the drawn width at the surface and the requested
+                        # depth, clipped so it cuts nothing above the surface.
+                        sphere_r = (r * r + pocket_depth * pocket_depth) / (2 * pocket_depth)
+                        cap = mf.Manifold.sphere(sphere_r, circular_segments=ROUND_SEGS).translate(
+                            (0.0, 0.0, sphere_r - pocket_depth)
+                        )
+                        clip = mf.Manifold.cube(
+                            (2 * r + 0.02, 2 * r + 0.02, pocket_depth + 0.02), center=True,
+                        ).translate((0.0, 0.0, -pocket_depth / 2))
+                        cutter = (cap ^ clip).translate((fh_x, fh_y, wall_top_z))
+                    else:
+                        # deeper pockets stop at the sphere's own radius; the
+                        # cylinder shape reaches the full depth
+                        cutter = mf.Manifold.sphere(r, circular_segments=ROUND_SEGS).translate(
+                            (fh_x, fh_y, wall_top_z)
+                        )
                 elif shape == 'cylinder':
                     r = fh.radius_mm
                     cutter = (

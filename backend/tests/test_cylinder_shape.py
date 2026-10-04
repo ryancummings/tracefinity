@@ -167,6 +167,37 @@ class TestCylinderShape:
         assert cyl_floor_z < circ_floor_z - 1.0
 
 
+class TestSphereShape:
+    def test_shallow_sphere_opens_to_the_drawn_circle_at_the_requested_depth(self):
+        # the editor draws the circle at its full radius; a pocket shallower
+        # than that radius must still open that wide, not narrower
+        wall_top = 30.0
+        for radius, depth in ((10.0, 5.0), (10.0, 8.0), (15.0, 5.0)):
+            poly = _scaled_poly_with_hole("circle", radius=radius)
+            cutter = _make_finger_holes(
+                [poly], BinParams(cutout_depth=depth), wall_top_z=wall_top,
+                max_depth=25.0, offset_x=0.0, offset_y=0.0,
+            )
+            box = cutter.bounding_box()
+            assert abs(box[2] - (wall_top - depth)) < 0.05
+            assert box[5] <= wall_top + 0.02
+            opening = cutter.slice(wall_top - 0.01).bounds()
+            assert abs((opening[2] - opening[0]) - 2 * radius) < 0.1
+            # a curved floor, not a cylinder: narrower halfway down
+            middle = cutter.slice(wall_top - depth / 2).bounds()
+            assert middle[2] - middle[0] < 2 * radius - 0.5
+
+    def test_deep_sphere_is_a_hemisphere_of_the_drawn_circle(self):
+        poly = _scaled_poly_with_hole("circle", radius=5.0)
+        cutter = _make_finger_holes(
+            [poly], BinParams(cutout_depth=20.0), wall_top_z=30.0,
+            max_depth=25.0, offset_x=0.0, offset_y=0.0,
+        )
+        assert abs(cutter.bounding_box()[2] - 25.0) < 0.05
+        opening = cutter.slice(29.99).bounds()
+        assert abs((opening[2] - opening[0]) - 10.0) < 0.1
+
+
 class TestFilletedRectangleShape:
     def test_filleted_rectangle_radius_clamps_to_width_or_depth(self):
         assert abs(_filleted_rect_radius(width=10.0, pocket_depth=30.0) - (10.0 / 3.0)) < 1e-9

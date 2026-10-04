@@ -44,7 +44,7 @@ Reference for AI agents. Check here before suggesting new features or claiming s
 ## Cutouts (Finger Holes and Pockets)
 
 - Finger hole tool (15mm default)
-- Circle mode (spherical pocket, 10mm default)
+- Circle mode (spherical pocket, 10mm default; opens to the drawn diameter and reaches at most its radius deep)
 - Cylinder mode (flat-bottomed circular, 10mm default)
 - Square mode (20mm default)
 - Rectangle mode (30x20mm default)
