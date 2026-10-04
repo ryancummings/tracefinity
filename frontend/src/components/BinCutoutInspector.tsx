@@ -3,11 +3,13 @@
 import type { CutoutShape, FingerHole, PlacedTool } from '@/types'
 import { NumericInput } from '@/components/NumericInput'
 import { BinInspectorPanel } from '@/components/BinInspectorPanel'
-import { isRectangularCutout } from '@/lib/cutouts'
+import { cutoutOverlapsOutline, isRectangularCutout } from '@/lib/cutouts'
 
 interface Props {
   hole: FingerHole
   tool: PlacedTool
+  // every tool in the bin, to find the pockets this cutout reaches into
+  placedTools: PlacedTool[]
   binDepth: number
   maxDepth: number
   onUpdate: (updates: Partial<FingerHole>) => void
@@ -17,11 +19,14 @@ interface Props {
 
 const inputClass = 'w-16 rounded bg-elevated px-2 py-1 text-right text-xs text-text-primary border border-border-subtle'
 
-export function BinCutoutInspector({ hole, tool, binDepth, maxDepth, onUpdate, onDepthChange, onRemove }: Props) {
+export function BinCutoutInspector({ hole, tool, placedTools, binDepth, maxDepth, onUpdate, onDepthChange, onRemove }: Props) {
   const shape = hole.shape ?? 'circle'
   const isRect = isRectangularCutout(shape)
   const inheritedDepth = Math.min(maxDepth, Math.max(5, tool.depth_override ?? binDepth))
   const effectiveDepth = Math.min(maxDepth, Math.max(Math.min(5, maxDepth), hole.depth_override ?? inheritedDepth))
+  const pocketDepth = (t: PlacedTool) => Math.min(maxDepth, Math.max(5, t.depth_override ?? binDepth))
+  const overlapping = placedTools.filter(t => cutoutOverlapsOutline(hole, t.points, t.interior_rings))
+  const ownerOverlaps = overlapping.some(t => t.id === tool.id)
   const displayRotation = ((hole.rotation ?? 0) % 360 + 540) % 360 - 180
   const changeShape = (next: CutoutShape) => {
     const updates: Partial<FingerHole> = { shape: next }
@@ -67,7 +72,19 @@ export function BinCutoutInspector({ hole, tool, binDepth, maxDepth, onUpdate, o
           <NumericInput value={effectiveDepth} min={Math.min(5, maxDepth)} max={maxDepth} step={0.25} onChange={onDepthChange} className={inputClass} />
         </label>
         {hole.depth_override != null && hole.depth_override > maxDepth && <p className="text-[11px] text-text-muted">Limited by bin depth to {effectiveDepth.toFixed(2)} mm.</p>}
-        {hole.depth_override != null && <button className="text-xs text-accent" onClick={() => onDepthChange(null)}>Use inherited depth ({inheritedDepth.toFixed(2)} mm)</button>}
+        {overlapping.map(t => {
+          // the owner's pocket is matched by inheriting its depth, which then
+          // follows later changes; another tool's depth is copied
+          const isOwner = t.id === tool.id
+          const matched = isOwner ? hole.depth_override == null : hole.depth_override === (t.depth_override ?? binDepth)
+          return (
+            <button key={t.id} className="block text-left text-xs text-accent disabled:text-text-muted" disabled={matched}
+              onClick={() => onDepthChange(isOwner ? null : t.depth_override ?? binDepth)}>
+              {matched ? `Matches ${t.name} pocket` : `Match ${t.name} pocket`} ({pocketDepth(t).toFixed(2)} mm)
+            </button>
+          )
+        })}
+        {hole.depth_override != null && !ownerOverlaps && <button className="text-xs text-accent" onClick={() => onDepthChange(null)}>Use inherited depth ({inheritedDepth.toFixed(2)} mm)</button>}
       </div>
       <button onClick={onRemove} data-delete-shortcut aria-label="Remove cutout" className="mt-4 w-full rounded border border-red-800 px-2 py-1.5 text-xs text-red-400 hover:bg-red-900/20">Remove cutout</button>
     </BinInspectorPanel>
