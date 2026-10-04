@@ -60,7 +60,7 @@ export function CutoutOverlay({ holes, zoom = 1, interactive, selectedId, editMo
                 className="pointer-events-none"
               />
             )}
-            {(shape === 'square' || (isRectangular && !isFilleted)) && (
+            {(shape === 'square' || isRectangular) && (
               <rect
                 x={left} y={top} width={w} height={h}
                 fill={fill} stroke={stroke} strokeWidth={strokeWidth}
@@ -69,14 +69,20 @@ export function CutoutOverlay({ holes, zoom = 1, interactive, selectedId, editMo
                 onClick={interactive && onClick ? onClick : undefined}
               />
             )}
-            {isFilleted && (
-              <path
-                d={`M ${left} ${top} H ${right} V ${bottom - filletR} Q ${right} ${bottom} ${right - filletR} ${bottom} H ${left + filletR} Q ${left} ${bottom} ${left} ${bottom - filletR} V ${top} Z`}
-                fill={fill} stroke={stroke} strokeWidth={strokeWidth}
-                className={cursor}
-                onMouseDown={interactive && onMouseDown ? (e) => onMouseDown(fh.id, e) : undefined}
-                onClick={interactive && onClick ? onClick : undefined}
-              />
+            {/* the fillets round the floor into the two side walls and run the
+                full height, so from above the pocket is a plain rectangle; dashes
+                mark where the flat floor starts once the depth, and so the fillet
+                radius, is known */}
+            {isFilleted && defaultCutoutDepth !== undefined && filletR > 0 && (
+              <g className="pointer-events-none">
+                {[left + filletR, right - filletR].map(fx => (
+                  <line
+                    key={fx}
+                    x1={fx} y1={top} x2={fx} y2={bottom}
+                    stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={`${4 / zoom} ${3 / zoom}`}
+                  />
+                ))}
+              </g>
             )}
           </g>
         )
