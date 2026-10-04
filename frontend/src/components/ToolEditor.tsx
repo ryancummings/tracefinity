@@ -14,6 +14,7 @@ import {
 import { DISPLAY_SCALE, SNAP_GRID, ZOOM_FACTOR } from '@/lib/constants'
 import { cutoutShapeLabel, isRectangularCutout, resizeRectCutout, resizeRoundCutout } from '@/lib/cutouts'
 import { useHistory } from '@/hooks/useHistory'
+import { useOutlineEraser } from '@/hooks/useOutlineEraser'
 import { useDeleteShortcut } from '@/hooks/useDeleteShortcut'
 import { ToolEditorToolbar } from '@/components/ToolEditorToolbar'
 import { ToolEditorCanvas } from '@/components/ToolEditorCanvas'
@@ -224,6 +225,34 @@ export function ToolEditor({ points, fingerHoles, interiorRings, smoothed, smoot
   const screenToMmRef = useRef(screenToMm)
   useEffect(() => { screenToMmRef.current = screenToMm }, [screenToMm])
 
+  const mmPerPixel = useCallback(() => {
+    if (!svgRef.current) return 1 / DISPLAY_SCALE
+    const rect = svgRef.current.getBoundingClientRect()
+    if (!rect.width || !rect.height) return 1 / DISPLAY_SCALE
+    return Math.max(zvbW / rect.width, zvbH / rect.height) / DISPLAY_SCALE
+  }, [zvbW, zvbH])
+
+  // erasing raw points under a smoothed preview, or one side of a mirrored
+  // outline, would not do what the canvas shows
+  const eraser = useOutlineEraser({
+    active: editMode === 'erase' && !previewSmoothed && !mirrorMode,
+    toOutline: screenToMm,
+    unitsPerPixel: mmPerPixel,
+    current: () => ({ points: pointsRef.current, interior_rings: currentRingsRef.current }),
+    onPreview: outline => {
+      setDragPoints(outline.points)
+      setDragRings(outline.interior_rings)
+    },
+    onCommit: (outline, start) => {
+      if (outline.points !== start.points) onPointsRef.current(outline.points)
+      if (outline.interior_rings !== start.interior_rings) onRingsRef.current?.(outline.interior_rings)
+      pushHistory({ points: outline.points, fingerHoles: holesRef.current, interiorRings: outline.interior_rings })
+      setDragPoints(null)
+      setDragRings(null)
+    },
+    blocked: () => spaceHeld.current,
+  })
+
   // scroll-to-zoom (needs passive: false for preventDefault)
   useEffect(() => {
     const svg = svgRef.current
@@ -351,6 +380,7 @@ export function ToolEditor({ points, fingerHoles, interiorRings, smoothed, smoot
     if (applySymmetrize(axis, keepSide)) {
       setSymmetryAxis(axis)
       setMirrorMode(true)
+      setEditMode(mode => (mode === 'erase' ? 'select' : mode))
     }
   }, [mirrorMode, keepSide, applySymmetrize])
 
@@ -844,6 +874,10 @@ export function ToolEditor({ points, fingerHoles, interiorRings, smoothed, smoot
         sourceImageOpacity={sourceImageOpacity}
         symmetryAxis={mirrorMode ? symmetryAxis : null}
         onAxisMouseDown={handleAxisMouseDown}
+        eraserBrush={eraser.brush}
+        onEraserPointerDown={eraser.onPointerDown}
+        onEraserPointerMove={eraser.onPointerMove}
+        onEraserPointerLeave={eraser.onPointerLeave}
       />
 
       {/* floating toolbar: centred in the free space to the right of the
@@ -894,6 +928,9 @@ export function ToolEditor({ points, fingerHoles, interiorRings, smoothed, smoot
           onAutoRotate={handleAutoRotateWrapped}
           autoRotating={autoRotating}
           hasInteriorRings={currentRings.length > 0}
+          eraseDisabled={mirrorMode}
+          eraserSize={eraser.size}
+          setEraserSize={eraser.setSize}
         />
         </div>
       </div>
